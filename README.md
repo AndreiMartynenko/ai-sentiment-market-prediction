@@ -1,9 +1,21 @@
-	•	Project title: AI-Driven Sentiment Analysis for Market Prediction
-	•	Short summary: 3–4 lines describing the aim (same as your Abstract).
-	•	Tech stack: Python, Golang, FinBERT, PostgreSQL, Telegram Bot API.
-	•	Timeline: “Phase 1 starts July 1, final delivery November 2025.”
-	•	What you’ll share: code, scripts, notebooks, data samples (if legal).
-	•	Disclaimer: “This is an academic research project. Signals generated here are for experimental use only — not financial advice.”
+# i-sentiment-market-prediction
+
+An AI-powered sentiment analysis system that extracts sentiment from financial news and social media to generate market predictions and alerts.
+
+## Tech Stack
+
+- Python (FinBERT, NLP, PyTorch)
+- Golang (backend signal processing)
+- PostgreSQL (storage)
+- Telegram Bot (alerts)
+
+## Structure
+
+- `nlp/`: NLP pipeline and FinBERT training
+- `backend/`: Golang microservice for execution logic
+- `scripts/`: Data collectors and orchestrators
+- `notebooks/`: Exploratory work and testing
+- `reports/`: Backtesting results
 
 
 /data
@@ -17,3 +29,50 @@
 main.py
 README.md
 requirements.txt
+
+
+structure
+
+i-sentiment-market-prediction/
+│
+├── 📄 README.md
+├── 📄 requirements.txt
+├── 📄 go.mod
+├── 📄 .gitignore
+│
+├── 📁 data/                         # Raw & processed data
+│   ├── raw/                        # Scraped or downloaded data (text, price)
+│   └── processed/                  # Cleaned, structured datasets
+│
+├── 📁 notebooks/                   # Jupyter/Colab Notebooks
+│   ├── 01_exploration.ipynb
+│   ├── 02_finbert_inference.ipynb
+│   └── 03_sentiment_price_merge.ipynb
+│
+├── 📁 nlp/                         # NLP pipeline (Python)
+│   ├── __init__.py
+│   ├── sentiment_model.py         # FinBERT model loading + inference
+│   ├── preprocess.py              # Tokenization, cleaning, etc.
+│   └── utils.py                   # Common helper functions
+│
+├── 📁 backend/                     # Backend (Golang)
+│   ├── main.go                    # Main Golang app
+│   ├── signal.go                  # Signal logic (thresholds, scoring)
+│   ├── db.go                      # PostgreSQL connection + queries
+│   └── telegram.go                # Telegram bot logic
+│
+├── 📁 config/                      # API keys, env configs
+│   └── config.yaml
+│
+├── 📁 scripts/                     # Data fetching, preprocessing
+│   ├── fetch_news.py              # News API
+│   ├── fetch_prices.py            # Yahoo/Binance price history
+│   └── sentiment_scoring.py       # End-to-end batch pipeline
+│
+├── 📁 tests/                       # Unit tests (Pytest, Go tests)
+│
+├── 📁 docker/                      # Docker setup
+│   ├── Dockerfile.api
+│   └── docker-compose.yml
+│
+└── 📁 reports/                     # Final figures, logs, and backtest results

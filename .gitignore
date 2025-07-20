@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+.env
+
+# Data
+data/
+*.csv
+*.json
+
+# Notebooks
+*.ipynb_checkpoints
+
+# Models
+*.h5
+*.pt
+*.pkl
+
+# Go
+*.exe
+*.out
+*.mod
+*.sum
