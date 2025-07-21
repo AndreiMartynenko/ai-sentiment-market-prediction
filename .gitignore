@@ -1,26 +1,35 @@
 # Python
+venv/
 __pycache__/
 *.pyc
 .env
 
+# Jupyter
+.ipynb_checkpoints/
+
 # Data
 data/
+*.txt
 *.csv
 *.json
 
-# Notebooks
-*.ipynb_checkpoints
-
-# Models
+# Models and Weights
 *.h5
 *.pt
 *.pkl
+*.bin
+*.safetensors
+
+# Caches
+transformers_cache/
+torch_cache/
+huggingface/
 
 # Go
 *.exe
 *.out
 *.mod
-*.sumvenv/
-__pycache__/
-*.pyc
-.env
+*.sum
+
+# System files
+.DS_Store
