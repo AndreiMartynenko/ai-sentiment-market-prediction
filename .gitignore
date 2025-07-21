@@ -20,4 +20,7 @@ data/
 *.exe
 *.out
 *.mod
-*.sum
+*.sumvenv/
+__pycache__/
+*.pyc
+.env
