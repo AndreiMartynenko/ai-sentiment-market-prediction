@@ -1,13 +1,25 @@
+#src/news_scraper.py
+
+import logging
 from dotenv import load_dotenv
 import os
 import requests
 
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+# Load environment variables
 load_dotenv()
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 
 if not NEWS_API_KEY:
+    logging.error("Missing NEWS_API_KEY. Set it in your .env file.")
     raise ValueError("Missing NEWS_API_KEY. Set it in your .env file.")
 
+# Define request parameters
 url = "https://newsapi.org/v2/everything"
 params = {
     "q": "stock market OR inflation OR earnings",
@@ -17,33 +29,34 @@ params = {
     "apiKey": NEWS_API_KEY
 }
 
+logging.info("Sending request to NewsAPI...")
 response = requests.get(url, params=params)
 
-# Show response status code and content if there's an error
 if response.status_code != 200:
-    print(f"API Error {response.status_code}: {response.text}")
+    logging.error(f"API Error {response.status_code}: {response.text}")
     exit()
 
 try:
     data = response.json()
 except Exception as e:
-    print("Failed to parse JSON:", str(e))
-    print("Raw response:", response.text)
+    logging.exception("Failed to parse JSON response:")
+    logging.debug("Raw response: %s", response.text)
     exit()
 
 articles = data.get("articles", [])
 
 if not articles:
-    print("No articles found. Try adjusting the query.")
+    logging.warning("No articles found. Try adjusting the query.")
 else:
     os.makedirs("data/raw", exist_ok=True)
-    with open("data/raw/news_headlines.txt", "w", encoding="utf-8") as f:
+    filepath = "data/raw/news_headlines.txt"
+    with open(filepath, "w", encoding="utf-8") as f:
         for i, article in enumerate(articles, 1):
             title = article["title"]
             description = article.get("description", "")
             url = article["url"]
 
-            print(f"{i}. {title}\n   {description}\n   URL: {url}\n---")
+            logging.info(f"{i}. {title}")
             f.write(f"{title} - {description}\n{url}\n\n")
 
-    print("Headlines saved to data/raw/news_headlines.txt")
+    logging.info(f"✅ Headlines saved to {filepath}")

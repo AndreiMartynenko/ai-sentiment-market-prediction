@@ -1,44 +1,40 @@
-import os
+# src/signal_generator.py
 
-SENTIMENT_FILE = 'data/processed/sentiment_output.txt'
-SIGNAL_FILE = 'data/processed/trading_signals.txt'
+import logging
+import sys
+from pathlib import Path
 
-# Simple rule-based signal generation
-def generate_signal(label, score):
-    if label == 'POSITIVE' and score >= 0.95:
-        return 'LONG'
-    elif label == 'NEGATIVE' and score >= 0.95:
-        return 'SHORT'
+# Setup logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+input_path = Path("data/processed/sentiment_output.txt")
+output_path = Path("data/processed/trading_signals.txt")
+
+# Check if sentiment file exists
+if not input_path.exists():
+    logging.error(f"Sentiment file not found: {input_path}")
+    sys.exit(1)
+
+# Read sentiment output
+lines = input_path.read_text(encoding="utf-8").splitlines()
+if not lines:
+    logging.warning("Sentiment file is empty. No signals generated.")
+    sys.exit(0)
+
+# Generate signals
+signals = []
+for line in lines:
+    if line.startswith("NEGATIVE"):
+        signals.append(f"SHORT | {line}")
+    elif line.startswith("POSITIVE"):
+        signals.append(f"LONG | {line}")
     else:
-        return 'NEUTRAL'
+        signals.append(f"NEUTRAL | {line}")
 
-# Main logic
-def run_signal_generator():
-    if not os.path.exists(SENTIMENT_FILE):
-        print("Sentiment file not found. Please run sentiment_analysis.py first.")
-        return
+# Save signals
+output_path.parent.mkdir(parents=True, exist_ok=True)
+with output_path.open("w", encoding="utf-8") as f:
+    for signal in signals:
+        f.write(signal + "\n")
 
-    signals = []
-    with open(SENTIMENT_FILE, 'r') as f:
-        for line in f:
-            if not line.strip():
-                continue
-            try:
-                label_part, headline = line.strip().split(":", 1)
-                label = label_part.split("(")[0].strip()
-                score = float(label_part.split("(")[1].replace(")", ""))
-                signal = generate_signal(label, score)
-                signals.append(f"{signal} | {label} ({score:.2f}) | {headline.strip()}")
-            except Exception as e:
-                print(f"Error parsing line: {line}")
-                continue
-
-    os.makedirs(os.path.dirname(SIGNAL_FILE), exist_ok=True)
-    with open(SIGNAL_FILE, 'w') as f:
-        for signal_line in signals:
-            f.write(signal_line + "\n")
-
-    print(f"Signals saved to {SIGNAL_FILE}")
-
-if __name__ == "__main__":
-    run_signal_generator()
+logging.info(f"Signals saved to {output_path} ({len(signals)} entries)")
