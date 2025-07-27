@@ -11,6 +11,7 @@ import (
 	"github.com/AndreiMartynenko/golang-api/handlers"
 )
 
+// main.go
 func main() {
 	err := godotenv.Load("../.env")
 	if err != nil {
