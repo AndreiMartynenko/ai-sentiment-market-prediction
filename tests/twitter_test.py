@@ -52,7 +52,7 @@ class SafeStream(tweepy.StreamingClient):
         print(f"Stream error: {errors}")
         time.sleep(60)  # Backoff on errors
 
-# 6. Main Execution
+
 if __name__ == "__main__":
     if test_tweet_counts():
         print("\nStarting stream... (Ctrl+C to stop)")
