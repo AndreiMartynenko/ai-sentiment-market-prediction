@@ -5,6 +5,7 @@ import (
 	"strconv"
 )
 
+// Struct
 type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
