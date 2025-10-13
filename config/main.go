@@ -13,11 +13,13 @@ type Config struct {
 	ML       MLConfig
 }
 
+// Server configuration
 type ServerConfig struct {
 	Port string
 	Host string
 }
 
+// Database configuration
 type DatabaseConfig struct {
 	Host     string
 	Port     int
