@@ -8,6 +8,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// DatabaseService handles database operations
 type DatabaseService struct {
 	DB *sql.DB
 }
