@@ -10,6 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// NewsHandler handles news-related requests
+
 type NewsHandler struct {
 	service *services.NewsService
 }
