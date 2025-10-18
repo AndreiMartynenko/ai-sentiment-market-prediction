@@ -13,6 +13,7 @@ type DatabaseService struct {
 	DB *sql.DB
 }
 
+// NewDatabaseService initializes a new DatabaseService
 func NewDatabaseService(host, port, user, password, dbname, sslmode string) (*DatabaseService, error) {
 	// Build connection string
 	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
@@ -34,6 +35,7 @@ func NewDatabaseService(host, port, user, password, dbname, sslmode string) (*Da
 	return &DatabaseService{DB: db}, nil
 }
 
+// Close closes the database connection
 func (d *DatabaseService) Close() error {
 	if d.DB != nil {
 		return d.DB.Close()
