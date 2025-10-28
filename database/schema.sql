@@ -1,200 +1,205 @@
--- AI Sentiment Market Prediction Database Schema
--- PostgreSQL Database Schema for Dissertation Project
+-- AI-Driven Sentiment Market Prediction System
+-- PostgreSQL Database Schema
 
--- Enable required extensions
+-- Create database (run separately if needed)
+-- CREATE DATABASE sentiment_market;
+
+-- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
--- Create database if not exists (run this separately)
--- CREATE DATABASE sentiment_prediction;
-
--- News Articles Table
-CREATE TABLE IF NOT EXISTS news_articles (
-    id SERIAL PRIMARY KEY,
-    title TEXT NOT NULL,
-    content TEXT,
-    source VARCHAR(255) NOT NULL,
-    url TEXT UNIQUE,
-    published_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Sentiment Analysis Results Table
-CREATE TABLE IF NOT EXISTS sentiment_analysis (
-    id SERIAL PRIMARY KEY,
-    article_id INTEGER REFERENCES news_articles(id) ON DELETE CASCADE,
-    text TEXT NOT NULL,
-    sentiment VARCHAR(20) NOT NULL CHECK (sentiment IN ('POSITIVE', 'NEGATIVE', 'NEUTRAL')),
-    confidence DECIMAL(5,4) NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
-    model VARCHAR(100) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Trading Signals Table
-CREATE TABLE IF NOT EXISTS trading_signals (
+-- Table: news_raw
+-- Stores raw news articles from various sources
+CREATE TABLE IF NOT EXISTS news_raw (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(20) NOT NULL,
-    action VARCHAR(10) NOT NULL CHECK (action IN ('BUY', 'SELL', 'HOLD')),
-    strength DECIMAL(5,4) NOT NULL CHECK (strength >= 0 AND strength <= 1),
-    confidence DECIMAL(5,4) NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
-    reasoning TEXT,
-    sentiment_score DECIMAL(8,4),
-    price_target DECIMAL(12,4),
-    stop_loss DECIMAL(12,4),
+    title TEXT NOT NULL,
+    text TEXT,
+    source VARCHAR(100) NOT NULL,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    expires_at TIMESTAMP WITH TIME ZONE
+    
+    -- Indexes
+    INDEX idx_news_symbol (symbol),
+    INDEX idx_news_timestamp (timestamp),
+    INDEX idx_news_created (created_at)
 );
 
--- Market Data Table
+-- Table: market_data
+-- Stores OHLCV market data
 CREATE TABLE IF NOT EXISTS market_data (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(20) NOT NULL,
-    price DECIMAL(12,4) NOT NULL,
-    volume BIGINT,
-    high DECIMAL(12,4),
-    low DECIMAL(12,4),
-    open DECIMAL(12,4),
-    close DECIMAL(12,4),
+    open DECIMAL(20, 8) NOT NULL,
+    high DECIMAL(20, 8) NOT NULL,
+    low DECIMAL(20, 8) NOT NULL,
+    close DECIMAL(20, 8) NOT NULL,
+    volume DECIMAL(20, 2) NOT NULL,
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    -- Unique constraint to prevent duplicates
+    UNIQUE(symbol, timestamp),
+    
+    -- Indexes
+    INDEX idx_market_symbol (symbol),
+    INDEX idx_market_timestamp (timestamp),
+    INDEX idx_market_symbol_timestamp (symbol, timestamp)
 );
 
--- Performance Metrics Table
-CREATE TABLE IF NOT EXISTS performance_metrics (
+-- Table: sentiment_results
+-- Stores sentiment analysis results from FinBERT
+CREATE TABLE IF NOT EXISTS sentiment_results (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(20) NOT NULL,
-    total_signals INTEGER NOT NULL DEFAULT 0,
-    correct_signals INTEGER NOT NULL DEFAULT 0,
-    accuracy DECIMAL(5,4) NOT NULL DEFAULT 0,
-    total_return DECIMAL(10,4) NOT NULL DEFAULT 0,
-    sharpe_ratio DECIMAL(8,4),
-    max_drawdown DECIMAL(8,4),
-    win_rate DECIMAL(5,4),
-    average_return DECIMAL(10,4),
-    volatility DECIMAL(8,4),
-    start_date TIMESTAMP WITH TIME ZONE NOT NULL,
-    end_date TIMESTAMP WITH TIME ZONE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- User Subscriptions Table (for Telegram notifications)
-CREATE TABLE IF NOT EXISTS user_subscriptions (
-    id SERIAL PRIMARY KEY,
-    telegram_user_id BIGINT UNIQUE NOT NULL,
-    username VARCHAR(255),
-    first_name VARCHAR(255),
-    last_name VARCHAR(255),
-    subscribed_symbols TEXT[], -- Array of symbols user wants to track
-    notification_frequency VARCHAR(20) DEFAULT 'daily' CHECK (notification_frequency IN ('realtime', 'hourly', 'daily', 'weekly')),
-    is_active BOOLEAN DEFAULT TRUE,
+    sentiment_score DECIMAL(10, 8) NOT NULL CHECK (sentiment_score >= 0 AND sentiment_score <= 1),
+    label VARCHAR(20) NOT NULL CHECK (label IN ('POSITIVE', 'NEGATIVE', 'NEUTRAL')),
+    confidence DECIMAL(5, 4) NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    
+    -- Indexes
+    INDEX idx_sentiment_symbol (symbol),
+    INDEX idx_sentiment_label (label),
+    INDEX idx_sentiment_timestamp (timestamp)
 );
 
--- Model Performance Tracking Table
-CREATE TABLE IF NOT EXISTS model_performance (
+-- Table: technical_indicators
+-- Stores technical indicator calculations
+CREATE TABLE IF NOT EXISTS technical_indicators (
     id SERIAL PRIMARY KEY,
-    model_name VARCHAR(100) NOT NULL,
-    accuracy DECIMAL(5,4) NOT NULL,
-    precision_score DECIMAL(5,4),
-    recall_score DECIMAL(5,4),
-    f1_score DECIMAL(5,4),
-    test_date TIMESTAMP WITH TIME ZONE NOT NULL,
-    dataset_size INTEGER,
-    training_time_seconds INTEGER,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    symbol VARCHAR(20) NOT NULL,
+    ema20 DECIMAL(20, 8),
+    ema50 DECIMAL(20, 8),
+    rsi DECIMAL(10, 4) CHECK (rsi >= 0 AND rsi <= 100),
+    macd DECIMAL(20, 8),
+    technical_score DECIMAL(10, 8) NOT NULL CHECK (technical_score >= 0 AND technical_score <= 1),
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    -- Unique constraint
+    UNIQUE(symbol, timestamp),
+    
+    -- Indexes
+    INDEX idx_technical_symbol (symbol),
+    INDEX idx_technical_timestamp (timestamp)
 );
 
--- Indexes for better performance
-CREATE INDEX IF NOT EXISTS idx_news_articles_published_at ON news_articles(published_at);
-CREATE INDEX IF NOT EXISTS idx_news_articles_source ON news_articles(source);
-CREATE INDEX IF NOT EXISTS idx_news_articles_created_at ON news_articles(created_at);
+-- Table: hybrid_signals
+-- Stores final trading signals from hybrid decision engine
+CREATE TABLE IF NOT EXISTS hybrid_signals (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(20) NOT NULL,
+    signal VARCHAR(10) NOT NULL CHECK (signal IN ('BUY', 'SELL', 'HOLD')),
+    hybrid_score DECIMAL(10, 8) NOT NULL CHECK (hybrid_score >= 0 AND hybrid_score <= 1),
+    confidence DECIMAL(5, 4) NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+    reason TEXT,
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    -- Indexes
+    INDEX idx_signals_symbol (symbol),
+    INDEX idx_signals_signal (signal),
+    INDEX idx_signals_timestamp (timestamp),
+    INDEX idx_signals_created (created_at)
+);
 
-CREATE INDEX IF NOT EXISTS idx_sentiment_analysis_article_id ON sentiment_analysis(article_id);
-CREATE INDEX IF NOT EXISTS idx_sentiment_analysis_sentiment ON sentiment_analysis(sentiment);
-CREATE INDEX IF NOT EXISTS idx_sentiment_analysis_created_at ON sentiment_analysis(created_at);
-CREATE INDEX IF NOT EXISTS idx_sentiment_analysis_model ON sentiment_analysis(model);
+-- View: latest_signals
+-- Get the most recent signal for each symbol
+CREATE OR REPLACE VIEW latest_signals AS
+SELECT DISTINCT ON (symbol)
+    id, symbol, signal, hybrid_score, confidence, reason, timestamp, created_at
+FROM hybrid_signals
+ORDER BY symbol, timestamp DESC;
 
-CREATE INDEX IF NOT EXISTS idx_trading_signals_symbol ON trading_signals(symbol);
-CREATE INDEX IF NOT EXISTS idx_trading_signals_action ON trading_signals(action);
-CREATE INDEX IF NOT EXISTS idx_trading_signals_created_at ON trading_signals(created_at);
-CREATE INDEX IF NOT EXISTS idx_trading_signals_expires_at ON trading_signals(expires_at);
-
-CREATE INDEX IF NOT EXISTS idx_market_data_symbol ON market_data(symbol);
-CREATE INDEX IF NOT EXISTS idx_market_data_timestamp ON market_data(timestamp);
-CREATE INDEX IF NOT EXISTS idx_market_data_symbol_timestamp ON market_data(symbol, timestamp);
-
-CREATE INDEX IF NOT EXISTS idx_performance_metrics_symbol ON performance_metrics(symbol);
-CREATE INDEX IF NOT EXISTS idx_performance_metrics_created_at ON performance_metrics(created_at);
-
-CREATE INDEX IF NOT EXISTS idx_user_subscriptions_telegram_id ON user_subscriptions(telegram_user_id);
-CREATE INDEX IF NOT EXISTS idx_user_subscriptions_active ON user_subscriptions(is_active);
-
-CREATE INDEX IF NOT EXISTS idx_model_performance_model ON model_performance(model_name);
-CREATE INDEX IF NOT EXISTS idx_model_performance_test_date ON model_performance(test_date);
-
--- Full-text search indexes
-CREATE INDEX IF NOT EXISTS idx_news_articles_title_gin ON news_articles USING gin(to_tsvector('english', title));
-CREATE INDEX IF NOT EXISTS idx_news_articles_content_gin ON news_articles USING gin(to_tsvector('english', content));
-
--- Triggers for updated_at timestamps
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
-
-CREATE TRIGGER update_news_articles_updated_at 
-    BEFORE UPDATE ON news_articles 
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_user_subscriptions_updated_at 
-    BEFORE UPDATE ON user_subscriptions 
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
--- Views for common queries
-CREATE OR REPLACE VIEW recent_signals AS
-SELECT 
-    ts.*,
-    sa.sentiment,
-    sa.confidence as sentiment_confidence,
-    na.title as news_title,
-    na.source as news_source
-FROM trading_signals ts
-LEFT JOIN sentiment_analysis sa ON ts.id = sa.id
-LEFT JOIN news_articles na ON sa.article_id = na.id
-WHERE ts.created_at >= NOW() - INTERVAL '7 days'
-ORDER BY ts.created_at DESC;
-
+-- View: sentiment_summary
+-- Aggregate sentiment analysis by symbol
 CREATE OR REPLACE VIEW sentiment_summary AS
 SELECT 
-    DATE(created_at) as date,
-    sentiment,
-    COUNT(*) as count,
-    AVG(confidence) as avg_confidence
-FROM sentiment_analysis
-WHERE created_at >= NOW() - INTERVAL '30 days'
-GROUP BY DATE(created_at), sentiment
-ORDER BY date DESC, sentiment;
+    symbol,
+    AVG(sentiment_score) as avg_sentiment_score,
+    COUNT(*) as total_analyses,
+    COUNT(CASE WHEN label = 'POSITIVE' THEN 1 END) as positive_count,
+    COUNT(CASE WHEN label = 'NEGATIVE' THEN 1 END) as negative_count,
+    COUNT(CASE WHEN label = 'NEUTRAL' THEN 1 END) as neutral_count,
+    MAX(timestamp) as last_updated
+FROM sentiment_results
+GROUP BY symbol;
 
-CREATE OR REPLACE VIEW signal_performance AS
+-- View: technical_summary
+-- Aggregate technical indicators by symbol
+CREATE OR REPLACE VIEW technical_summary AS
 SELECT 
     symbol,
-    action,
-    COUNT(*) as total_signals,
-    AVG(confidence) as avg_confidence,
-    AVG(strength) as avg_strength
-FROM trading_signals
-WHERE created_at >= NOW() - INTERVAL '30 days'
-GROUP BY symbol, action
-ORDER BY symbol, action;
+    AVG(technical_score) as avg_technical_score,
+    AVG(ema20) as avg_ema20,
+    AVG(ema50) as avg_ema50,
+    AVG(rsi) as avg_rsi,
+    AVG(macd) as avg_macd,
+    COUNT(*) as total_analyses,
+    MAX(timestamp) as last_updated
+FROM technical_indicators
+GROUP BY symbol;
 
--- Sample data insertion (for testing)
-INSERT INTO news_articles (title, content, source, url, published_at) VALUES
-('Bitcoin Reaches New All-Time High', 'Bitcoin has reached a new all-time high of $100,000, driven by institutional adoption and positive market sentiment.', 'CoinDesk', 'https://coindesk.com/bitcoin-ath', NOW() - INTERVAL '1 hour'),
-('Tesla Stock Surges on Strong Q4 Earnings', 'Tesla reported better-than-expected earnings, leading to a 15% surge in stock price during after-hours trading.', 'Reuters', 'https://reuters.com/tesla-earnings', NOW() - INTERVAL '2 hours'),
-('Federal Reserve Hints at Interest Rate Cuts', 'The Federal Reserve signaled potential interest rate cuts in the coming months, boosting market optimism.', 'Bloomberg', 'https://bloomberg.com/fed-rate-cuts', NOW() - INTERVAL '3 hours')
-ON CONFLICT (url) DO NOTHING;
+-- View: hybrid_summary
+-- Aggregate hybrid signals by symbol
+CREATE OR REPLACE VIEW hybrid_summary AS
+SELECT 
+    symbol,
+    AVG(hybrid_score) as avg_hybrid_score,
+    AVG(confidence) as avg_confidence,
+    COUNT(*) as total_signals,
+    COUNT(CASE WHEN signal = 'BUY' THEN 1 END) as buy_count,
+    COUNT(CASE WHEN signal = 'SELL' THEN 1 END) as sell_count,
+    COUNT(CASE WHEN signal = 'HOLD' THEN 1 END) as hold_count,
+    MAX(timestamp) as last_updated
+FROM hybrid_signals
+GROUP BY symbol;
+
+-- Function: clean_old_data
+-- Remove data older than specified days
+CREATE OR REPLACE FUNCTION clean_old_data(days_to_keep INTEGER DEFAULT 90)
+RETURNS TABLE(deleted_news INTEGER, deleted_market INTEGER, deleted_sentiment INTEGER, deleted_technical INTEGER, deleted_signals INTEGER)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    news_count INTEGER;
+    market_count INTEGER;
+    sentiment_count INTEGER;
+    technical_count INTEGER;
+    signals_count INTEGER;
+BEGIN
+    -- Delete old news
+    DELETE FROM news_raw WHERE created_at < NOW() - INTERVAL '1 day' * days_to_keep;
+    GET DIAGNOSTICS news_count = ROW_COUNT;
+    
+    -- Delete old market data
+    DELETE FROM market_data WHERE created_at < NOW() - INTERVAL '1 day' * days_to_keep;
+    GET DIAGNOSTICS market_count = ROW_COUNT;
+    
+    -- Delete old sentiment results
+    DELETE FROM sentiment_results WHERE created_at < NOW() - INTERVAL '1 day' * days_to_keep;
+    GET DIAGNOSTICS sentiment_count = ROW_COUNT;
+    
+    -- Delete old technical indicators
+    DELETE FROM technical_indicators WHERE created_at < NOW() - INTERVAL '1 day' * days_to_keep;
+    GET DIAGNOSTICS technical_count = ROW_COUNT;
+    
+    -- Delete old signals
+    DELETE FROM hybrid_signals WHERE created_at < NOW() - INTERVAL '1 day' * days_to_keep;
+    GET DIAGNOSTICS signals_count = ROW_COUNT;
+    
+    RETURN QUERY SELECT news_count, market_count, sentiment_count, technical_count, signals_count;
+END;
+$$;
+
+-- Sample seed data
+INSERT INTO market_data (symbol, open, high, low, close, volume, timestamp) VALUES
+('BTCUSDT', 95000.00, 97000.00, 94000.00, 96500.00, 123456789.00, NOW() - INTERVAL '1 day'),
+('BTCUSDT', 96500.00, 97500.00, 95000.00, 97000.00, 125000000.00, NOW() - INTERVAL '12 hours'),
+('BTCUSDT', 97000.00, 98000.00, 96500.00, 97500.00, 120000000.00, NOW())
+ON CONFLICT (symbol, timestamp) DO NOTHING;
+
+INSERT INTO news_raw (symbol, title, text, source, timestamp) VALUES
+('BTCUSDT', 'Bitcoin Reaches New All-Time High', 'Bitcoin surged past $97,000 today as institutional adoption continues to grow.', 'CryptoNews', NOW() - INTERVAL '6 hours'),
+('BTCUSDT', 'Major Exchange Announces Bitcoin ETF', 'A leading crypto exchange announced plans for a new Bitcoin ETF product.', 'CoinDesk', NOW() - INTERVAL '3 hours')
+ON CONFLICT DO NOTHING;

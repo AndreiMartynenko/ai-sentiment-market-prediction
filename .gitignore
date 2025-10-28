@@ -1,35 +1,95 @@
-# Python
-venv/
-__pycache__/
-*.pyc
-.env
-
-# Jupyter
-.ipynb_checkpoints/
-
-# Data
-data/
-*.txt
-*.csv
-*.json
-
-# Models and Weights
-*.h5
-*.pt
-*.pkl
-*.bin
-*.safetensors
-
-# Caches
-transformers_cache/
-torch_cache/
-huggingface/
-
-# Go
+# Binaries
 *.exe
-*.out
-*.mod
-*.sum
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+main
 
-# System files
+# Test binary
+*.test
+
+# Output
+*.out
+
+# Go workspace file
+go.work
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git/
+.mypy_cache/
+.pytest_cache/
+.hypothesis/
+*.egg-info/
+dist/
+build/
+
+# PyTorch models
+*.pt
+*.pth
+models/
+*.ckpt
+*.pkl
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .DS_Store
+
+# Logs
+logs/
+*.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Docker
+docker-compose.override.yml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Data files
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
