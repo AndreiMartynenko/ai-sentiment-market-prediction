@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from ml_service.sentiment import get_analyzer, FinBERTAnalyzer, get_db_manager as get_sentiment_db
 from ml_service.indicators import get_indicators, TechnicalIndicators, get_db_manager as get_technical_db
 from ml_service.hybrid_engine import get_engine, HybridEngine, get_db_manager as get_hybrid_db
+from ml_service.crypto_data import get_crypto_data_manager
 
 # Setup logging
 logging.basicConfig(
@@ -42,10 +43,11 @@ app.add_middleware(
 try:
     analyzer = get_analyzer()
     indicators = get_indicators()
-    engine = get_engine(sentiment_weight=0.6, technical_weight=0.4)  # α=0.6, β=0.4
+    engine = get_engine(sentiment_weight=0.5, technical_weight=0.3, volatility_weight=0.2)  # α=0.5, β=0.3, γ=0.2
     sentiment_db = get_sentiment_db()
     technical_db = get_technical_db()
     hybrid_db = get_hybrid_db()
+    crypto_data_manager = get_crypto_data_manager()
     logger.info("All ML components initialized successfully")
 except Exception as e:
     logger.error(f"Error initializing ML components: {e}")
@@ -88,13 +90,25 @@ class TechnicalResponse(BaseModel):
 
 class HybridRequest(BaseModel):
     """Request model for hybrid signal generation"""
-    symbol: str = Field(..., description="Trading symbol (e.g., AAPL, BTC-USD)")
+    symbol: str = Field(..., description="Trading symbol (e.g., BTCUSDT, ETHUSDT)")
+    sentiment_score: Optional[float] = Field(None, description="Sentiment score (-1.0 to +1.0)")
+    technical_score: Optional[float] = Field(None, description="Technical score (-1.0 to +1.0)")
+    volatility_index: Optional[float] = Field(None, description="Volatility index (-1.0 to +1.0)")
+
+class CryptoNewsRequest(BaseModel):
+    currencies: Optional[List[str]] = Field(["BTC", "ETH", "SOL", "XRP"], description="List of crypto currencies")
+    limit: Optional[int] = Field(10, description="Number of news items to fetch")
+
+class CryptoMarketRequest(BaseModel):
+    symbol: Optional[str] = Field(None, description="Specific symbol or None for overview")
+    period: Optional[str] = Field("1d", description="Time period (1h, 4h, 1d, 7d)")
     
 class HybridResponse(BaseModel):
     """Response model for hybrid signals"""
     symbol: str
     sentiment_score: Optional[float]
     technical_score: Optional[float]
+    volatility_index: Optional[float]
     hybrid_score: float
     signal: str
     confidence: float
@@ -369,6 +383,98 @@ async def configure_engine(sentiment_weight: float, technical_weight: float):
         }
     except Exception as e:
         logger.error(f"Error configuring engine: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Crypto-specific endpoints
+@app.post("/crypto/news")
+async def get_crypto_news(request: CryptoNewsRequest):
+    """
+    Get latest cryptocurrency news from CryptoPanic
+    
+    Args:
+        request: Crypto news request with currencies and limit
+        
+    Returns:
+        List of crypto news items with sentiment analysis
+    """
+    if crypto_data_manager is None:
+        raise HTTPException(status_code=503, detail="Crypto data service not initialized")
+    
+    try:
+        news_items = crypto_data_manager.get_top_crypto_news(request.currencies, request.limit)
+        
+        if not news_items:
+            return {"success": False, "message": "No news available", "items": []}
+        
+        # Analyze sentiment for each news item
+        analyzed_news = []
+        for item in news_items:
+            if analyzer:
+                sentiment_result = analyzer.analyze_crypto(item['title'])
+                item['sentiment_score'] = sentiment_result['sentiment_score']
+                item['sentiment_label'] = sentiment_result['label']
+                item['confidence'] = sentiment_result['confidence']
+            else:
+                item['sentiment_score'] = 0.0
+                item['sentiment_label'] = 'neutral'
+                item['confidence'] = 0.0
+            
+            analyzed_news.append(item)
+        
+        return {
+            "success": True,
+            "items": analyzed_news,
+            "count": len(analyzed_news)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching crypto news: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/crypto/market")
+async def get_crypto_market_data(request: CryptoMarketRequest):
+    """
+    Get cryptocurrency market data from Binance
+    
+    Args:
+        request: Crypto market request with symbol and period
+        
+    Returns:
+        Market data or overview
+    """
+    if crypto_data_manager is None:
+        raise HTTPException(status_code=503, detail="Crypto data service not initialized")
+    
+    try:
+        if request.symbol:
+            # Get specific symbol data
+            market_data = crypto_data_manager.get_crypto_market_data(request.symbol, request.period)
+            if market_data is None:
+                raise HTTPException(status_code=404, detail=f"No data found for {request.symbol}")
+            
+            return {
+                "success": True,
+                "symbol": request.symbol,
+                "period": request.period,
+                "data_points": len(market_data),
+                "latest_price": float(market_data['close'].iloc[-1]) if not market_data.empty else None,
+                "data": market_data.to_dict('records') if not market_data.empty else []
+            }
+        else:
+            # Get market overview
+            overview = crypto_data_manager.get_market_overview()
+            if overview is None:
+                raise HTTPException(status_code=500, detail="Failed to fetch market overview")
+            
+            return {
+                "success": True,
+                "overview": overview
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching crypto market data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

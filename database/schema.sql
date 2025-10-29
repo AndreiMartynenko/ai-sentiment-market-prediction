@@ -90,8 +90,9 @@ CREATE TABLE IF NOT EXISTS hybrid_signals (
     id SERIAL PRIMARY KEY,
     symbol VARCHAR(20) NOT NULL,
     signal VARCHAR(10) NOT NULL CHECK (signal IN ('BUY', 'SELL', 'HOLD')),
-    hybrid_score DECIMAL(10, 8) NOT NULL CHECK (hybrid_score >= 0 AND hybrid_score <= 1),
+    hybrid_score DECIMAL(10, 8) NOT NULL CHECK (hybrid_score >= -1 AND hybrid_score <= 1),
     confidence DECIMAL(5, 4) NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+    volatility_index DECIMAL(10, 8) CHECK (volatility_index >= -1 AND volatility_index <= 1),
     reason TEXT,
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -101,6 +102,50 @@ CREATE TABLE IF NOT EXISTS hybrid_signals (
     INDEX idx_signals_signal (signal),
     INDEX idx_signals_timestamp (timestamp),
     INDEX idx_signals_created (created_at)
+);
+
+-- Table: crypto_news
+-- Stores cryptocurrency news from CryptoPanic and other sources
+CREATE TABLE IF NOT EXISTS crypto_news (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(20) NOT NULL,
+    title TEXT NOT NULL,
+    url TEXT,
+    source VARCHAR(100) NOT NULL,
+    published_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    sentiment_score DECIMAL(10, 8) CHECK (sentiment_score >= -1 AND sentiment_score <= 1),
+    sentiment_label VARCHAR(20) CHECK (sentiment_label IN ('POSITIVE', 'NEGATIVE', 'NEUTRAL')),
+    confidence DECIMAL(5, 4) CHECK (confidence >= 0 AND confidence <= 1),
+    votes_positive INTEGER DEFAULT 0,
+    votes_negative INTEGER DEFAULT 0,
+    domain VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    -- Indexes
+    INDEX idx_crypto_news_symbol (symbol),
+    INDEX idx_crypto_news_published (published_at),
+    INDEX idx_crypto_news_sentiment (sentiment_label),
+    INDEX idx_crypto_news_source (source)
+);
+
+-- Table: onchain_metrics
+-- Stores on-chain metrics for cryptocurrencies
+CREATE TABLE IF NOT EXISTS onchain_metrics (
+    id SERIAL PRIMARY KEY,
+    symbol VARCHAR(20) NOT NULL,
+    metric_name VARCHAR(50) NOT NULL,
+    metric_value DECIMAL(20, 8) NOT NULL,
+    metric_unit VARCHAR(20),
+    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    -- Unique constraint
+    UNIQUE(symbol, metric_name, timestamp),
+    
+    -- Indexes
+    INDEX idx_onchain_symbol (symbol),
+    INDEX idx_onchain_metric (metric_name),
+    INDEX idx_onchain_timestamp (timestamp)
 );
 
 -- View: latest_signals

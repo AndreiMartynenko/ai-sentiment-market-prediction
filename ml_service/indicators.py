@@ -31,6 +31,7 @@ import psycopg2
 from psycopg2.extras import execute_values
 from datetime import datetime, timedelta
 from functools import lru_cache
+from .crypto_data import get_crypto_data_manager
 
 # Configure logging
 logging.basicConfig(
@@ -55,10 +56,10 @@ class TechnicalIndicators:
     
     def fetch_market_data(self, symbol: str, period: str = "3mo") -> Optional[pd.DataFrame]:
         """
-        Download OHLC market data using yfinance
+        Fetch market data using crypto data service or yfinance as fallback
         
         Args:
-            symbol: Trading symbol (e.g., "AAPL", "BTC-USD", "ETH-USD")
+            symbol: Trading symbol (e.g., "BTCUSDT", "ETHUSDT", "AAPL")
             period: Time period for data (e.g., "1d", "5d", "1mo", "3mo", "1y")
             
         Returns:
@@ -67,22 +68,31 @@ class TechnicalIndicators:
         try:
             logger.info(f"Fetching market data for {symbol} (period: {period})")
             
-            # Download data using yfinance
-            ticker = yf.Ticker(symbol)
-            df = ticker.history(period=period)
+            # Check if it's a crypto symbol (ends with USDT, BTC, ETH, etc.)
+            crypto_symbols = ["USDT", "BTC", "ETH", "SOL", "XRP", "ADA", "DOT", "LINK"]
+            is_crypto = any(symbol.upper().endswith(suffix) for suffix in crypto_symbols)
             
-            if df.empty:
+            if is_crypto:
+                # Use crypto data service
+                crypto_manager = get_crypto_data_manager()
+                df = crypto_manager.get_crypto_market_data(symbol, period)
+            else:
+                # Fallback to yfinance for traditional assets
+                ticker = yf.Ticker(symbol)
+                df = ticker.history(period=period)
+                # Rename columns to lowercase for consistency
+                if not df.empty:
+                    df.columns = df.columns.str.lower()
+            
+            if df is None or df.empty:
                 logger.error(f"No data available for symbol {symbol}")
                 return None
             
             # Ensure required columns exist
-            required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+            required_columns = ['open', 'high', 'low', 'close', 'volume']
             if not all(col in df.columns for col in required_columns):
                 logger.error(f"Missing required columns in data for {symbol}")
                 return None
-            
-            # Rename columns to lowercase
-            df.columns = df.columns.str.lower()
             
             logger.info(f"Fetched {len(df)} data points for {symbol}")
             return df

@@ -15,8 +15,8 @@ import numpy as np
 
 # Page configuration
 st.set_page_config(
-    page_title="AI-Driven Sentiment Market Dashboard",
-    page_icon="📈",
+    page_title="CryptoMind AI - Cryptocurrency Market Dashboard",
+    page_icon="₿",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -27,7 +27,7 @@ st.markdown("""
     .main-header {
         font-size: 2.5rem;
         font-weight: bold;
-        color: #1E88E5;
+        color: #F7931A;
         text-align: center;
         margin-bottom: 1rem;
     }

@@ -1,13 +1,13 @@
 """
-Hybrid AI Decision Engine
-Combines sentiment analysis and technical indicators to generate intelligent trading signals
+Crypto-Focused Hybrid AI Decision Engine
+Combines sentiment analysis, technical indicators, and volatility to generate intelligent crypto trading signals
 
-This module implements a hybrid decision system that merges sentiment and technical signals
+This module implements a hybrid decision system that merges sentiment, technical, and volatility signals
 using adaptive weighting. The hybrid score is calculated as:
 
-hybrid_score = α * sentiment_score + β * technical_score
+hybrid_score = α * sentiment_score + β * technical_score + γ * volatility_index
 
-where α (sentiment weight) defaults to 0.6 and β (technical weight) defaults to 0.4.
+where α (sentiment weight) defaults to 0.5, β (technical weight) defaults to 0.3, and γ (volatility weight) defaults to 0.2.
 
 Signal Generation Logic:
 - hybrid_score > 0.3  → BUY signal (bullish momentum)
@@ -15,10 +15,10 @@ Signal Generation Logic:
 - -0.3 ≤ hybrid_score ≤ 0.3 → HOLD signal (neutral)
 
 Confidence Calculation:
-confidence = (abs(sentiment_score) * α + abs(technical_score) * β)
+confidence = (abs(sentiment_score) * α + abs(technical_score) * β + abs(volatility_index) * γ)
 
-The module fetches the latest sentiment and technical data from PostgreSQL tables
-and generates comprehensive trading signals with human-readable reasoning.
+The module fetches the latest sentiment, technical, and volatility data from PostgreSQL tables
+and generates comprehensive crypto trading signals with human-readable reasoning.
 """
 
 import logging
@@ -47,35 +47,40 @@ class Signal(Enum):
 
 class HybridEngine:
     """
-    Hybrid AI Decision Engine combining sentiment and technical analysis
+    Crypto-focused Hybrid AI Decision Engine combining sentiment, technical analysis, and volatility
     
-    Fetches latest sentiment and technical data from PostgreSQL, computes
-    weighted hybrid score, and generates actionable trading signals.
+    Fetches latest sentiment, technical, and volatility data from PostgreSQL, computes
+    weighted hybrid score, and generates actionable crypto trading signals.
     """
     
-    def __init__(self, sentiment_weight: float = 0.6, technical_weight: float = 0.4):
+    def __init__(self, sentiment_weight: float = 0.5, technical_weight: float = 0.3, volatility_weight: float = 0.2):
         """
         Initialize hybrid decision engine
         
         Args:
-            sentiment_weight: Weight α for sentiment analysis (default: 0.6)
-            technical_weight: Weight β for technical indicators (default: 0.4)
+            sentiment_weight: Weight α for sentiment analysis (default: 0.5)
+            technical_weight: Weight β for technical indicators (default: 0.3)
+            volatility_weight: Weight γ for volatility analysis (default: 0.2)
         """
         self.alpha = sentiment_weight
         self.beta = technical_weight
+        self.gamma = volatility_weight
         
         # Normalize weights to sum to 1
-        total_weight = sentiment_weight + technical_weight
+        total_weight = sentiment_weight + technical_weight + volatility_weight
         if total_weight > 0:
             self.alpha = sentiment_weight / total_weight
             self.beta = technical_weight / total_weight
+            self.gamma = volatility_weight / total_weight
         else:
-            self.alpha = 0.6
-            self.beta = 0.4
+            self.alpha = 0.5
+            self.beta = 0.3
+            self.gamma = 0.2
         
         logger.info(f"Hybrid Engine initialized with weights - "
                    f"α (sentiment): {self.alpha:.2f}, "
-                   f"β (technical): {self.beta:.2f}")
+                   f"β (technical): {self.beta:.2f}, "
+                   f"γ (volatility): {self.gamma:.2f}")
     
     def fetch_sentiment_data(self, symbol: str, db_conn) -> Optional[Dict]:
         """
@@ -151,43 +156,111 @@ class HybridEngine:
             logger.error(f"Error fetching technical data for {symbol}: {e}")
             return None
     
-    def compute_hybrid_score(self, sentiment_score: float, 
-                            technical_score: float) -> float:
+    def calculate_volatility_index(self, symbol: str, db_conn, period_days: int = 7) -> Optional[float]:
         """
-        Compute hybrid score using weighted combination
+        Calculate volatility index based on price variance
         
-        Formula: hybrid_score = α * sentiment_score + β * technical_score
+        Args:
+            symbol: Trading symbol
+            db_conn: Database connection
+            period_days: Number of days to look back for volatility calculation
+            
+        Returns:
+            Volatility index (-1.0 to +1.0) or None if error
+        """
+        try:
+            cur = db_conn.cursor()
+            
+            # Fetch recent price data
+            query = """
+            SELECT close, timestamp 
+            FROM market_data 
+            WHERE symbol = %s 
+            AND timestamp >= NOW() - INTERVAL '%s days'
+            ORDER BY timestamp DESC
+            LIMIT 100
+            """
+            
+            cur.execute(query, (symbol, period_days))
+            rows = cur.fetchall()
+            
+            if len(rows) < 10:  # Need minimum data points
+                logger.warning(f"Insufficient data for volatility calculation: {len(rows)} points")
+                return None
+            
+            # Extract close prices
+            prices = [float(row[0]) for row in rows]
+            
+            # Calculate price changes (returns)
+            returns = []
+            for i in range(1, len(prices)):
+                if prices[i-1] != 0:
+                    returns.append((prices[i] - prices[i-1]) / prices[i-1])
+            
+            if not returns:
+                return None
+            
+            # Calculate volatility (standard deviation of returns)
+            volatility = np.std(returns)
+            
+            # Normalize volatility to -1.0 to +1.0 range
+            # High volatility (>0.05) = +1.0, Low volatility (<0.01) = -1.0
+            if volatility > 0.05:
+                volatility_index = 1.0
+            elif volatility < 0.01:
+                volatility_index = -1.0
+            else:
+                # Linear interpolation between -1.0 and +1.0
+                volatility_index = (volatility - 0.01) / (0.05 - 0.01) * 2.0 - 1.0
+            
+            logger.info(f"Volatility index for {symbol}: {volatility_index:.4f} (raw volatility: {volatility:.4f})")
+            return volatility_index
+            
+        except Exception as e:
+            logger.error(f"Error calculating volatility index: {e}")
+            return None
+    
+    def compute_hybrid_score(self, sentiment_score: float, 
+                            technical_score: float, 
+                            volatility_index: float = 0.0) -> float:
+        """
+        Compute hybrid score using weighted combination with volatility
+        
+        Formula: hybrid_score = α * sentiment_score + β * technical_score + γ * volatility_index
         
         Args:
             sentiment_score: Sentiment score (-1.0 to +1.0)
             technical_score: Technical score (-1.0 to +1.0)
+            volatility_index: Volatility index (-1.0 to +1.0)
             
         Returns:
             Hybrid score in range -1.0 to +1.0
         """
         try:
-            hybrid_score = (self.alpha * sentiment_score) + (self.beta * technical_score)
+            hybrid_score = (self.alpha * sentiment_score) + (self.beta * technical_score) + (self.gamma * volatility_index)
             return round(hybrid_score, 4)
         except Exception as e:
             logger.error(f"Error computing hybrid score: {e}")
             return 0.0
     
     def compute_confidence(self, sentiment_score: float, 
-                          technical_score: float) -> float:
+                          technical_score: float,
+                          volatility_index: float = 0.0) -> float:
         """
-        Compute confidence based on weighted absolute values
+        Compute confidence based on weighted absolute values including volatility
         
-        Formula: confidence = (abs(sentiment_score) * α + abs(technical_score) * β)
+        Formula: confidence = (abs(sentiment_score) * α + abs(technical_score) * β + abs(volatility_index) * γ)
         
         Args:
             sentiment_score: Sentiment score
             technical_score: Technical score
+            volatility_index: Volatility index
             
         Returns:
             Confidence score (0.0 to 1.0)
         """
         try:
-            confidence = (abs(sentiment_score) * self.alpha) + (abs(technical_score) * self.beta)
+            confidence = (abs(sentiment_score) * self.alpha) + (abs(technical_score) * self.beta) + (abs(volatility_index) * self.gamma)
             # Clamp to 0-1 range
             confidence = max(0.0, min(1.0, confidence))
             return round(confidence, 4)
@@ -265,6 +338,7 @@ class HybridEngine:
             # Fetch latest data
             sentiment_data = self.fetch_sentiment_data(symbol, db_conn)
             technical_data = self.fetch_technical_data(symbol, db_conn)
+            volatility_index = self.calculate_volatility_index(symbol, db_conn)
             
             # Check if we have sufficient data
             if sentiment_data is None and technical_data is None:
@@ -273,6 +347,7 @@ class HybridEngine:
                     "error": "No sentiment or technical data available",
                     "sentiment_score": None,
                     "technical_score": None,
+                    "volatility_index": volatility_index or 0.0,
                     "hybrid_score": 0.0,
                     "signal": "HOLD",
                     "confidence": 0.0,
@@ -282,6 +357,7 @@ class HybridEngine:
             # Extract scores (handle missing data)
             sentiment_score = sentiment_data.get('sentiment_score', 0.0) if sentiment_data else 0.0
             technical_score = technical_data.get('technical_score', 0.0) if technical_data else 0.0
+            volatility_index = volatility_index or 0.0
             
             # If only one data source, use it with reduced confidence
             if sentiment_data is None:
@@ -293,10 +369,10 @@ class HybridEngine:
                 confidence = 0.5  # Reduced confidence
                 reason_base = "Sentiment analysis only"
             else:
-                # Compute hybrid score using both sources
-                hybrid_score = self.compute_hybrid_score(sentiment_score, technical_score)
-                confidence = self.compute_confidence(sentiment_score, technical_score)
-                reason_base = f"Sentiment score: {sentiment_score:.2f}, Technical score: {technical_score:.2f}"
+                # Compute hybrid score using all sources
+                hybrid_score = self.compute_hybrid_score(sentiment_score, technical_score, volatility_index)
+                confidence = self.compute_confidence(sentiment_score, technical_score, volatility_index)
+                reason_base = f"Sentiment: {sentiment_score:.2f}, Technical: {technical_score:.2f}, Volatility: {volatility_index:.2f}"
             
             # Generate signal
             signal, reason = self.generate_signal(hybrid_score)

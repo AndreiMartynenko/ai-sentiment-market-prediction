@@ -1,19 +1,21 @@
 """
-FinBERT-based Sentiment Analysis Module
-Analyzes financial news and text using yiyanghkust/finbert-tone model
+Crypto-Focused FinBERT Sentiment Analysis Module
+Analyzes cryptocurrency news and text using yiyanghkust/finbert-tone model
 
 This module provides sentiment analysis using FinBERT, a domain-specific BERT model
-fine-tuned on financial text. It integrates with FastAPI and PostgreSQL to provide
-real-time sentiment analysis with persistent storage.
+fine-tuned on financial text. Enhanced for cryptocurrency market analysis with
+crypto-specific keywords and sentiment patterns.
 
 Model: yiyanghkust/finbert-tone (HuggingFace)
 - 3-class classification: positive, negative, neutral
 - Optimized for financial text sentiment analysis
+- Enhanced for crypto news (BTC, ETH, SOL, XRP, DeFi, NFTs, etc.)
 - Output: sentiment_score (-1.0 to +1.0), confidence (max probability)
 """
 
 import logging
 import os
+import re
 from typing import Dict, List, Optional
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
@@ -31,10 +33,11 @@ logger = logging.getLogger(__name__)
 
 class FinBERTAnalyzer:
     """
-    FinBERT-based sentiment analyzer for financial text
+    Crypto-focused FinBERT sentiment analyzer for cryptocurrency text
     
     Uses yiyanghkust/finbert-tone model for domain-specific financial sentiment analysis.
-    Provides both single text and batch processing capabilities with PostgreSQL integration.
+    Enhanced with crypto-specific keywords and sentiment patterns for better
+    cryptocurrency market analysis.
     """
     
     def __init__(self, model_name: str = "yiyanghkust/finbert-tone"):
@@ -60,7 +63,20 @@ class FinBERTAnalyzer:
             # The model outputs: 0=positive, 1=negative, 2=neutral
             self.id2label = {0: "positive", 1: "negative", 2: "neutral"}
             
-            logger.info("FinBERT model loaded successfully")
+            # Crypto-specific sentiment keywords
+            self.crypto_positive_keywords = [
+                "moon", "bullish", "pump", "surge", "rally", "breakout", "adoption",
+                "institutional", "etf", "halving", "burn", "deflationary", "hodl",
+                "diamond hands", "to the moon", "bull run", "green", "gains"
+            ]
+        
+        self.crypto_negative_keywords = [
+            "dump", "crash", "bearish", "fud", "panic", "sell-off", "correction",
+            "bubble", "scam", "rug pull", "hack", "exploit", "bear market",
+            "red", "losses", "fear", "uncertainty", "doubt"
+        ]
+        
+        logger.info("Crypto-focused FinBERT model loaded successfully")
         except Exception as e:
             logger.error(f"Error loading FinBERT model: {e}")
             raise
@@ -136,6 +152,104 @@ class FinBERTAnalyzer:
                 "sentiment_score": 0.0,
                 "confidence": 0.0,
                 "error": str(e)
+            }
+    
+    def preprocess_crypto_text(self, text: str) -> str:
+        """
+        Preprocess crypto text for better sentiment analysis
+        
+        Args:
+            text: Raw crypto text
+            
+        Returns:
+            Preprocessed text
+        """
+        if not text:
+            return ""
+        
+        # Convert to lowercase
+        text = text.lower()
+        
+        # Replace common crypto abbreviations
+        crypto_replacements = {
+            "btc": "bitcoin",
+            "eth": "ethereum", 
+            "sol": "solana",
+            "xrp": "ripple",
+            "ada": "cardano",
+            "dot": "polkadot",
+            "link": "chainlink",
+            "defi": "decentralized finance",
+            "nft": "non-fungible token",
+            "dao": "decentralized autonomous organization"
+        }
+        
+        for abbr, full in crypto_replacements.items():
+            text = re.sub(rf'\b{abbr}\b', full, text)
+        
+        return text
+    
+    def get_crypto_sentiment_boost(self, text: str) -> float:
+        """
+        Calculate crypto-specific sentiment boost based on keywords
+        
+        Args:
+            text: Input text
+            
+        Returns:
+            Boost factor (-0.2 to +0.2)
+        """
+        text_lower = text.lower()
+        
+        positive_count = sum(1 for keyword in self.crypto_positive_keywords 
+                           if keyword in text_lower)
+        negative_count = sum(1 for keyword in self.crypto_negative_keywords 
+                           if keyword in text_lower)
+        
+        # Calculate boost (max ±0.2)
+        boost = min(0.2, (positive_count - negative_count) * 0.05)
+        return boost
+
+    def analyze_crypto(self, text: str) -> Dict[str, float]:
+        """
+        Analyze sentiment of crypto text with enhanced preprocessing
+        
+        Args:
+            text: Input crypto text to analyze
+            
+        Returns:
+            Dict with enhanced sentiment analysis results
+        """
+        if not text or not text.strip():
+            return {
+                "label": "neutral",
+                "sentiment_score": 0.0,
+                "confidence": 0.0
+            }
+        
+        try:
+            # Preprocess crypto text
+            processed_text = self.preprocess_crypto_text(text)
+            
+            # Get base sentiment analysis
+            result = self.analyze(processed_text)
+            
+            # Apply crypto-specific boost
+            crypto_boost = self.get_crypto_sentiment_boost(text)
+            result["sentiment_score"] += crypto_boost
+            
+            # Clamp to valid range
+            result["sentiment_score"] = max(-1.0, min(1.0, result["sentiment_score"]))
+            result["sentiment_score"] = round(result["sentiment_score"], 4)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error analyzing crypto text: {e}")
+            return {
+                "label": "neutral",
+                "sentiment_score": 0.0,
+                "confidence": 0.0
             }
     
     def analyze_batch(self, texts: List[str]) -> List[Dict]:
