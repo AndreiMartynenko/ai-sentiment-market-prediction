@@ -1,19 +1,21 @@
 """
 Streamlit Dashboard for AI-Driven Sentiment Market Prediction System
-Real-time visualization of signals, sentiment, and technical indicators
+Professional real-time visualization with PostgreSQL database integration
 """
 
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import requests
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from datetime import datetime, timedelta
 import os
+import numpy as np
 
 # Page configuration
 st.set_page_config(
-    page_title="AI Sentiment Market Prediction",
+    page_title="AI-Driven Sentiment Market Dashboard",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -23,319 +25,473 @@ st.set_page_config(
 st.markdown("""
     <style>
     .main-header {
-        font-size: 3rem;
+        font-size: 2.5rem;
         font-weight: bold;
         color: #1E88E5;
         text-align: center;
-        margin-bottom: 2rem;
+        margin-bottom: 1rem;
     }
-    .metric-card {
-        background-color: #f0f2f6;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 5px solid #1E88E5;
+    .kpi-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1.5rem;
+        border-radius: 10px;
+        color: white;
+        text-align: center;
     }
-    .buy-signal {
-        color: #28a745;
-        font-weight: bold;
-    }
-    .sell-signal {
-        color: #dc3545;
-        font-weight: bold;
-    }
-    .hold-signal {
-        color: #ffc107;
-        font-weight: bold;
-    }
+    .buy-signal { color: #28a745; font-weight: bold; }
+    .sell-signal { color: #dc3545; font-weight: bold; }
+    .hold-signal { color: #ffc107; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
-# API Configuration
-API_URL = os.getenv("API_URL", "http://localhost:8080/api/v1")
-ML_SERVICE_URL = os.getenv("ML_SERVICE_URL", "http://localhost:8000")
+# Database Configuration
+DB_CONFIG = {
+    "host": os.getenv("DB_HOST", "postgres"),
+    "user": os.getenv("POSTGRES_USER", "postgres"),
+    "password": os.getenv("POSTGRES_PASSWORD", "postgres"),
+    "database": os.getenv("POSTGRES_DB", "sentiment_market"),
+    "port": int(os.getenv("POSTGRES_PORT", "5432"))
+}
 
-# Sidebar
-st.sidebar.title("📊 Configuration")
-selected_symbol = st.sidebar.selectbox(
-    "Select Symbol",
-    ["BTCUSDT", "ETHUSDT", "ADAUSDT", "SOLUSDT", "XRPUSDT"],
-    index=0
-)
-
-time_range = st.sidebar.selectbox(
-    "Time Range",
-    ["1 Day", "7 Days", "30 Days", "90 Days"],
-    index=1
-)
-
-auto_refresh = st.sidebar.checkbox("Auto Refresh", value=True)
-refresh_interval = st.sidebar.slider("Refresh Interval (seconds)", 10, 300, 30)
-
-# Helper functions
-def fetch_signals(symbol: str):
-    """Fetch trading signals from API"""
+@st.cache_data(ttl=60)  # Cache for 60 seconds
+def get_db_connection():
+    """Create database connection with caching"""
     try:
-        response = requests.get(f"{API_URL}/signals/{symbol}", timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('data', [])
-        return []
+        conn = psycopg2.connect(**DB_CONFIG)
+        return conn
     except Exception as e:
-        st.error(f"Error fetching signals: {e}")
-        return []
-
-def fetch_sentiment(symbol: str):
-    """Fetch sentiment data from API"""
-    try:
-        response = requests.get(f"{API_URL}/sentiment/{symbol}", timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('data', [])
-        return []
-    except Exception as e:
-        st.error(f"Error fetching sentiment: {e}")
-        return []
-
-def fetch_technical(symbol: str):
-    """Fetch technical indicators from API"""
-    try:
-        response = requests.get(f"{API_URL}/technical/{symbol}", timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('data', [])
-        return []
-    except Exception as e:
-        st.error(f"Error fetching technical data: {e}")
-        return []
-
-def fetch_market_data(symbol: str):
-    """Fetch market data from API"""
-    try:
-        response = requests.get(f"{API_URL}/market/{symbol}", timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('data', [])
-        return []
-    except Exception as e:
-        st.error(f"Error fetching market data: {e}")
-        return []
-
-def get_signal_color(signal: str):
-    """Get color for signal type"""
-    if signal == "BUY":
-        return "#28a745"
-    elif signal == "SELL":
-        return "#dc3545"
-    else:
-        return "#ffc107"
-
-def plot_price_and_signals(market_data, signals):
-    """Create price chart with signals"""
-    if not market_data:
+        st.error(f"Database connection error: {e}")
         return None
+
+def load_data_from_db(table_name: str, symbol: str, limit: int = 200) -> pd.DataFrame:
+    """
+    Load data from PostgreSQL table
     
-    df_market = pd.DataFrame(market_data)
-    df_market['timestamp'] = pd.to_datetime(df_market['timestamp'])
-    df_market = df_market.sort_values('timestamp')
+    Args:
+        table_name: Name of the table
+        symbol: Trading symbol to filter by
+        limit: Maximum number of rows to fetch
+        
+    Returns:
+        DataFrame with the data
+    """
+    conn = get_db_connection()
+    if not conn:
+        return pd.DataFrame()
     
+    try:
+        query = f"""
+        SELECT * FROM {table_name} 
+        WHERE symbol = %s 
+        ORDER BY timestamp DESC 
+        LIMIT %s
+        """
+        df = pd.read_sql(query, conn, params=(symbol, limit))
+        return df
+    except Exception as e:
+        st.error(f"Error loading data from {table_name}: {e}")
+        return pd.DataFrame()
+    finally:
+        conn.close()
+
+def get_signal_color(signal: str) -> str:
+    """Get color for signal type"""
+    signal_colors = {"BUY": "#28a745", "SELL": "#dc3545", "HOLD": "#ffc107"}
+    return signal_colors.get(signal, "#6c757d")
+
+def plot_candlestick_with_ema(df: pd.DataFrame) -> go.Figure:
+    """Create candlestick chart with EMA overlays"""
     fig = go.Figure()
     
-    # Add candlestick chart
+    # Add candlestick
     fig.add_trace(go.Candlestick(
-        x=df_market['timestamp'],
-        open=df_market['open'],
-        high=df_market['high'],
-        low=df_market['low'],
-        close=df_market['close'],
-        name="Price"
+        x=df['timestamp'],
+        open=df['open'],
+        high=df['high'],
+        low=df['low'],
+        close=df['close'],
+        name="Price",
+        increasing_line_color='#26a69a',
+        decreasing_line_color='#ef5350'
     ))
     
-    # Add signals as markers
-    if signals:
-        df_signals = pd.DataFrame(signals)
-        df_signals['timestamp'] = pd.to_datetime(df_signals['timestamp'])
-        df_signals = df_signals.sort_values('timestamp')
-        
-        # Buy signals
-        buy_signals = df_signals[df_signals['signal'] == 'BUY']
-        if not buy_signals.empty:
-            fig.add_trace(go.Scatter(
-                x=buy_signals['timestamp'],
-                y=df_market.merge(buy_signals, on='timestamp', how='inner')['close'],
-                mode='markers',
-                marker=dict(symbol='triangle-up', size=15, color='green'),
-                name='Buy Signal',
-                showlegend=True
-            ))
-        
-        # Sell signals
-        sell_signals = df_signals[df_signals['signal'] == 'SELL']
-        if not sell_signals.empty:
-            fig.add_trace(go.Scatter(
-                x=sell_signals['timestamp'],
-                y=df_market.merge(sell_signals, on='timestamp', how='inner')['close'],
-                mode='markers',
-                marker=dict(symbol='triangle-down', size=15, color='red'),
-                name='Sell Signal',
-                showlegend=True
-            ))
+    # Add EMA20
+    if 'ema20' in df.columns:
+        fig.add_trace(go.Scatter(
+            x=df['timestamp'],
+            y=df['ema20'],
+            name="EMA20",
+            line=dict(color='orange', width=1.5)
+        ))
+    
+    # Add EMA50
+    if 'ema50' in df.columns:
+        fig.add_trace(go.Scatter(
+            x=df['timestamp'],
+            y=df['ema50'],
+            name="EMA50",
+            line=dict(color='blue', width=1.5)
+        ))
     
     fig.update_layout(
-        title=f"{selected_symbol} Price Chart with Trading Signals",
+        title=f"Price Chart with Exponential Moving Averages",
         xaxis_title="Time",
-        yaxis_title="Price (USDT)",
-        height=500,
-        hovermode='x unified'
+        yaxis_title="Price",
+        height=600,
+        hovermode='x unified',
+        template="plotly_white"
     )
     
     return fig
 
-def plot_sentiment_and_technical(sentiment_data, technical_data):
-    """Create sentiment and technical indicators chart"""
-    if not sentiment_data or not technical_data:
-        return None
+def plot_sentiment_timeline(df: pd.DataFrame) -> go.Figure:
+    """Create sentiment score timeline with color coding"""
+    fig = go.Figure()
     
-    df_sentiment = pd.DataFrame(sentiment_data)
-    df_technical = pd.DataFrame(technical_data)
+    # Color based on sentiment polarity
+    colors = ['green' if x > 0 else 'red' if x < 0 else 'gray' for x in df['sentiment_score']]
     
-    df_sentiment['timestamp'] = pd.to_datetime(df_sentiment['timestamp'])
-    df_technical['timestamp'] = pd.to_datetime(df_technical['timestamp'])
+    fig.add_trace(go.Scatter(
+        x=df['timestamp'],
+        y=df['sentiment_score'],
+        mode='lines+markers',
+        name='Sentiment Score',
+        line=dict(color='blue', width=2),
+        marker=dict(size=6),
+        fill='tozeroy',
+        fillcolor='rgba(100, 100, 255, 0.1)'
+    ))
     
-    # Create subplots
-    fig = make_subplots(
-        rows=3, cols=1,
-        subplot_titles=('Sentiment Score', 'Technical Indicators', 'Hybrid Score'),
-        vertical_spacing=0.12
+    # Add zero line
+    fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+    
+    fig.update_layout(
+        title="Sentiment Analysis Timeline (FinBERT)",
+        xaxis_title="Time",
+        yaxis_title="Sentiment Score (-1.0 to +1.0)",
+        height=500,
+        template="plotly_white"
     )
     
-    # Sentiment score
+    return fig
+
+def plot_technical_indicators(df: pd.DataFrame) -> go.Figure:
+    """Create technical indicators chart with RSI and MACD"""
+    fig = make_subplots(
+        rows=2, cols=1,
+        subplot_titles=('RSI (Relative Strength Index)', 'MACD (Moving Average Convergence Divergence)'),
+        vertical_spacing=0.15
+    )
+    
+    # RSI
     fig.add_trace(
         go.Scatter(
-            x=df_sentiment['timestamp'],
-            y=df_sentiment['sentiment_score'],
-            mode='lines+markers',
-            name='Sentiment',
-            line=dict(color='blue'),
-            fill='tozeroy'
+            x=df['timestamp'],
+            y=df['rsi'],
+            mode='lines',
+            name='RSI',
+            line=dict(color='purple', width=2)
         ),
         row=1, col=1
     )
     
-    # Technical indicators (RSI)
-    fig.add_trace(
-        go.Scatter(
-            x=df_technical['timestamp'],
-            y=df_technical['rsi'],
-            mode='lines',
-            name='RSI',
-            line=dict(color='orange')
-        ),
-        row=2, col=1
-    )
+    # Add RSI overbought/oversold lines
+    fig.add_hline(y=70, line_dash="dash", line_color="red", opacity=0.5, row=1, col=1)
+    fig.add_hline(y=30, line_dash="dash", line_color="green", opacity=0.5, row=1, col=1)
     
-    # Technical score
-    fig.add_trace(
-        go.Scatter(
-            x=df_technical['timestamp'],
-            y=df_technical['technical_score'],
-            mode='lines+markers',
-            name='Technical Score',
-            line=dict(color='purple'),
-            fill='tozeroy'
-        ),
-        row=3, col=1
-    )
+    # MACD
+    if 'macd' in df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=df['timestamp'],
+                y=df['macd'],
+                mode='lines',
+                name='MACD',
+                line=dict(color='blue', width=2)
+            ),
+            row=2, col=1
+        )
     
     fig.update_layout(
-        height=700,
-        title_text="Sentiment & Technical Analysis",
-        hovermode='x unified'
+        height=600,
+        title_text="Technical Indicators",
+        hovermode='x unified',
+        template="plotly_white"
     )
     
-    fig.update_xaxes(title_text="Time", row=3, col=1)
-    fig.update_yaxes(title_text="Score (0-1)", row=1, col=1)
-    fig.update_yaxes(title_text="RSI", row=2, col=1)
-    fig.update_yaxes(title_text="Score (0-1)", row=3, col=1)
+    fig.update_xaxes(title_text="Time", row=2, col=1)
+    fig.update_yaxes(title_text="RSI (0-100)", row=1, col=1)
+    fig.update_yaxes(title_text="MACD", row=2, col=1)
     
     return fig
 
-# Main content
-st.markdown('<div class="main-header">📈 AI Sentiment Market Prediction System</div>', unsafe_allow_html=True)
+def plot_hybrid_signals(df: pd.DataFrame) -> go.Figure:
+    """Create hybrid score timeline with signal markers"""
+    fig = go.Figure()
+    
+    # Plot hybrid score
+    fig.add_trace(go.Scatter(
+        x=df['timestamp'],
+        y=df['hybrid_score'],
+        mode='lines+markers',
+        name='Hybrid Score',
+        line=dict(color='blue', width=2),
+        marker=dict(size=8),
+        fill='tozeroy',
+        fillcolor='rgba(100, 100, 255, 0.1)'
+    ))
+    
+    # Add signal markers
+    buy_signals = df[df['signal'] == 'BUY']
+    sell_signals = df[df['signal'] == 'SELL']
+    hold_signals = df[df['signal'] == 'HOLD']
+    
+    if not buy_signals.empty:
+        fig.add_trace(go.Scatter(
+            x=buy_signals['timestamp'],
+            y=buy_signals['hybrid_score'],
+            mode='markers',
+            name='🟢 BUY',
+            marker=dict(symbol='triangle-up', size=12, color='green', line=dict(width=2))
+        ))
+    
+    if not sell_signals.empty:
+        fig.add_trace(go.Scatter(
+            x=sell_signals['timestamp'],
+            y=sell_signals['hybrid_score'],
+            mode='markers',
+            name='🔴 SELL',
+            marker=dict(symbol='triangle-down', size=12, color='red', line=dict(width=2))
+        ))
+    
+    if not hold_signals.empty:
+        fig.add_trace(go.Scatter(
+            x=hold_signals['timestamp'],
+            y=hold_signals['hybrid_score'],
+            mode='markers',
+            name='⚪ HOLD',
+            marker=dict(symbol='circle', size=8, color='gray', line=dict(width=1))
+        ))
+    
+    # Add threshold lines
+    fig.add_hline(y=0.3, line_dash="dash", line_color="green", opacity=0.5)
+    fig.add_hline(y=-0.3, line_dash="dash", line_color="red", opacity=0.5)
+    
+    fig.update_layout(
+        title="Hybrid AI Signals Over Time",
+        xaxis_title="Time",
+        yaxis_title="Hybrid Score (-1.0 to +1.0)",
+        height=500,
+        template="plotly_white"
+    )
+    
+    return fig
 
-# Fetch data
-signals = fetch_signals(selected_symbol)
-sentiment = fetch_sentiment(selected_symbol)
-technical = fetch_technical(selected_symbol)
-market_data = fetch_market_data(selected_symbol)
+def plot_confidence(df: pd.DataFrame) -> go.Figure:
+    """Create confidence bar chart"""
+    fig = go.Figure()
+    
+    # Color bars based on signal
+    colors = [get_signal_color(signal) for signal in df['signal']]
+    
+    fig.add_trace(go.Bar(
+        x=df['timestamp'],
+        y=df['confidence'],
+        name='Confidence',
+        marker=dict(color=colors),
+        text=[f"{c*100:.1f}%" for c in df['confidence']],
+        textposition='outside'
+    ))
+    
+    fig.update_layout(
+        title="Signal Confidence Levels",
+        xaxis_title="Time",
+        yaxis_title="Confidence (0-1)",
+        height=400,
+        template="plotly_white"
+    )
+    
+    return fig
 
-# Latest signal metrics
-if signals:
-    latest_signal = signals[0] if signals else None
-    if latest_signal:
-        col1, col2, col3, col4 = st.columns(4)
+# Sidebar Configuration
+st.sidebar.title("📊 Dashboard Configuration")
+
+selected_symbol = st.sidebar.selectbox(
+    "Select Trading Symbol",
+    ["AAPL", "TSLA", "GOOGL", "BTC-USD", "ETH-USD", "MSFT", "NVDA"],
+    index=3
+)
+
+# Date range filter
+date_range = st.sidebar.selectbox(
+    "Time Range",
+    ["Last 24 Hours", "Last 7 Days", "Last 30 Days", "All Time"],
+    index=2
+)
+
+# Refresh button
+if st.sidebar.button("🔄 Refresh Data", use_container_width=True):
+    st.cache_data.clear()
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 📈 Signal Thresholds")
+st.sidebar.info("""
+- **BUY**: hybrid_score > 0.3
+- **HOLD**: -0.3 ≤ hybrid_score ≤ 0.3
+- **SELL**: hybrid_score < -0.3
+""")
+
+# Main Content
+st.markdown('<div class="main-header">📈 AI-Driven Sentiment Market Dashboard</div>', unsafe_allow_html=True)
+
+# KPI Cards
+st.markdown("<br>", unsafe_allow_html=True)
+
+# Load latest data
+hybrid_df = load_data_from_db("hybrid_signals", selected_symbol, limit=1)
+market_df = load_data_from_db("market_data", selected_symbol, limit=1)
+
+# Display KPIs
+if not hybrid_df.empty and not market_df.empty:
+    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
+    
+    with kpi_col1:
+        current_price = market_df.iloc[0]['close'] if not market_df.empty else 0
+        st.metric("Current Price", f"${current_price:.2f}" if current_price > 0 else "N/A")
+    
+    with kpi_col2:
+        last_signal = hybrid_df.iloc[0]['signal'] if not hybrid_df.empty else "HOLD"
+        st.metric("Last Signal", last_signal)
+    
+    with kpi_col3:
+        confidence = hybrid_df.iloc[0]['confidence'] if not hybrid_df.empty else 0
+        st.metric("Confidence", f"{confidence*100:.1f}%")
+    
+    with kpi_col4:
+        sentiment_score = hybrid_df.iloc[0].get('sentiment_score', 0) if not hybrid_df.empty else 0
+        trend = "📈 Positive" if sentiment_score > 0 else "📉 Negative" if sentiment_score < 0 else "➡️ Neutral"
+        st.metric("Sentiment Trend", trend)
+
+# Tabs
+tab1, tab2, tab3, tab4 = st.tabs(["📈 Market Overview", "🧠 Sentiment", "⚙️ Technicals", "🤖 Hybrid Signals"])
+
+# Tab 1: Market Overview
+with tab1:
+    st.header("📈 Market Overview")
+    
+    # Load market data and technical indicators
+    market_data = load_data_from_db("market_data", selected_symbol, limit=100)
+    technical_data = load_data_from_db("technical_indicators", selected_symbol, limit=100)
+    
+    if not market_data.empty:
+        # Merge with technical data for EMAs
+        if not technical_data.empty:
+            market_data = pd.merge(market_data, technical_data[['timestamp', 'ema20', 'ema50']], 
+                                  on='timestamp', how='left')
         
+        fig_candle = plot_candlestick_with_ema(market_data)
+        st.plotly_chart(fig_candle, use_container_width=True)
+        
+        # Display latest market data
+        with st.expander("📊 Latest Market Data"):
+            st.dataframe(market_data.head(10), use_container_width=True)
+    else:
+        st.info("No market data available for the selected symbol")
+
+# Tab 2: Sentiment
+with tab2:
+    st.header("🧠 Sentiment Analysis")
+    
+    sentiment_data = load_data_from_db("sentiment_results", selected_symbol, limit=100)
+    
+    if not sentiment_data.empty:
+        fig_sentiment = plot_sentiment_timeline(sentiment_data)
+        st.plotly_chart(fig_sentiment, use_container_width=True)
+        
+        # Statistics
+        col1, col2, col3 = st.columns(3)
         with col1:
-            signal_class = f"{latest_signal['signal'].lower()}-signal"
-            st.metric("Current Signal", latest_signal['signal'], delta=None)
-        
+            st.metric("Avg Sentiment", f"{sentiment_data['sentiment_score'].mean():.4f}")
         with col2:
-            st.metric("Hybrid Score", f"{latest_signal['hybrid_score']:.4f}", delta=None)
-        
+            st.metric("Positive Ratio", f"{(sentiment_data['sentiment_score'] > 0).sum() / len(sentiment_data) * 100:.1f}%")
         with col3:
-            st.metric("Confidence", f"{latest_signal['confidence']*100:.2f}%", delta=None)
-        
-        with col4:
-            timestamp = pd.to_datetime(latest_signal['timestamp'])
-            st.metric("Last Updated", timestamp.strftime("%H:%M:%S"), delta=None)
-        
-        # Display reason
-        st.info(f"💡 **Reason**: {latest_signal['reason']}")
-else:
-    st.warning("No signals available for the selected symbol")
+            st.metric("Negative Ratio", f"{(sentiment_data['sentiment_score'] < 0).sum() / len(sentiment_data) * 100:.1f}%")
+    else:
+        st.info("No sentiment data available for the selected symbol")
 
-# Charts section
-st.markdown("---")
-st.subheader("📊 Price Chart with Trading Signals")
-
-if market_data:
-    fig_price = plot_price_and_signals(market_data, signals)
-    if fig_price:
-        st.plotly_chart(fig_price, use_container_width=True)
-else:
-    st.info("No market data available")
-
-if sentiment and technical:
-    st.subheader("🔍 Sentiment & Technical Analysis")
-    fig_analysis = plot_sentiment_and_technical(sentiment, technical)
-    if fig_analysis:
-        st.plotly_chart(fig_analysis, use_container_width=True)
-
-# Signals table
-st.markdown("---")
-st.subheader("📋 Recent Trading Signals")
-
-if signals:
-    df_signals = pd.DataFrame(signals)
-    df_signals['timestamp'] = pd.to_datetime(df_signals['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
+# Tab 3: Technicals
+with tab3:
+    st.header("⚙️ Technical Indicators")
     
-    # Format display
-    df_display = df_signals[['timestamp', 'symbol', 'signal', 'hybrid_score', 'confidence', 'reason']].copy()
-    df_display.columns = ['Timestamp', 'Symbol', 'Signal', 'Hybrid Score', 'Confidence', 'Reason']
+    technical_data = load_data_from_db("technical_indicators", selected_symbol, limit=100)
     
-    st.dataframe(df_display, use_container_width=True, hide_index=True)
-else:
-    st.info("No signals data available")
+    if not technical_data.empty:
+        fig_technical = plot_technical_indicators(technical_data)
+        st.plotly_chart(fig_technical, use_container_width=True)
+        
+        # Current values
+        current_technical = technical_data.iloc[0] if not technical_data.empty else None
+        if current_technical is not None:
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("EMA 20", f"{current_technical['ema20']:.2f}")
+            with col2:
+                st.metric("EMA 50", f"{current_technical['ema50']:.2f}")
+            with col3:
+                st.metric("RSI", f"{current_technical['rsi']:.2f}")
+            with col4:
+                st.metric("Technical Score", f"{current_technical['technical_score']:.4f}")
+    else:
+        st.info("No technical data available for the selected symbol")
+
+# Tab 4: Hybrid Signals
+with tab4:
+    st.header("🤖 Hybrid AI Signals")
+    
+    hybrid_data = load_data_from_db("hybrid_signals", selected_symbol, limit=50)
+    
+    if not hybrid_data.empty:
+        # Plot hybrid scores
+        fig_hybrid = plot_hybrid_signals(hybrid_data)
+        st.plotly_chart(fig_hybrid, use_container_width=True)
+        
+        # Confidence chart
+        fig_confidence = plot_confidence(hybrid_data)
+        st.plotly_chart(fig_confidence, use_container_width=True)
+        
+        # Signals table
+        st.subheader("📋 Recent Signals (Last 10)")
+        display_cols = ['timestamp', 'signal', 'sentiment_score', 'technical_score', 
+                       'hybrid_score', 'confidence', 'reason']
+        display_df = hybrid_data[display_cols].copy()
+        display_df = display_df.head(10)
+        
+        # Format display
+        display_df['timestamp'] = pd.to_datetime(display_df['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
+        display_df.columns = ['Timestamp', 'Signal', 'Sentiment', 'Technical', 'Hybrid', 'Confidence', 'Reason']
+        
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        
+        # Statistics
+        st.subheader("📊 Signal Statistics")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Signals", len(hybrid_data))
+        with col2:
+            buy_count = (hybrid_data['signal'] == 'BUY').sum()
+            st.metric("BUY Signals", buy_count)
+        with col3:
+            sell_count = (hybrid_data['signal'] == 'SELL').sum()
+            st.metric("SELL Signals", sell_count)
+    else:
+        st.info("No hybrid signals available for the selected symbol")
 
 # Footer
 st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #666; padding: 2rem;">
-    <p>AI-Driven Sentiment Market Prediction System</p>
-    <p>Powered by FinBERT + Technical Analysis + Hybrid AI Engine</p>
+    <p><strong>AI-Driven Sentiment Market Prediction System</strong></p>
+    <p>Powered by FinBERT + Technical Analysis + Hybrid AI Decision Engine</p>
+    <p style="font-size: 0.8rem;">Last updated: {}</p>
 </div>
-""", unsafe_allow_html=True)
-
-# Auto refresh
-if auto_refresh:
-    st.rerun()
-
+""".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")), unsafe_allow_html=True)

@@ -1,44 +1,64 @@
 """
-Sentiment Analysis Module using FinBERT
-Analyzes financial news and text for sentiment scoring
+FinBERT-based Sentiment Analysis Module
+Analyzes financial news and text using yiyanghkust/finbert-tone model
+
+This module provides sentiment analysis using FinBERT, a domain-specific BERT model
+fine-tuned on financial text. It integrates with FastAPI and PostgreSQL to provide
+real-time sentiment analysis with persistent storage.
+
+Model: yiyanghkust/finbert-tone (HuggingFace)
+- 3-class classification: positive, negative, neutral
+- Optimized for financial text sentiment analysis
+- Output: sentiment_score (-1.0 to +1.0), confidence (max probability)
 """
 
 import logging
 import os
 from typing import Dict, List, Optional
 import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, pipeline
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import psycopg2
+from psycopg2.extras import execute_values
+from datetime import datetime
 
-logging.basicConfig(level=logging.INFO)
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
+
 class FinBERTAnalyzer:
-    """FinBERT-based sentiment analyzer for financial text"""
+    """
+    FinBERT-based sentiment analyzer for financial text
     
-    def __init__(self, model_name: str = "ProsusAI/finbert"):
+    Uses yiyanghkust/finbert-tone model for domain-specific financial sentiment analysis.
+    Provides both single text and batch processing capabilities with PostgreSQL integration.
+    """
+    
+    def __init__(self, model_name: str = "yiyanghkust/finbert-tone"):
         """
         Initialize FinBERT model for sentiment analysis
         
         Args:
-            model_name: Hugging Face model name or path
+            model_name: Hugging Face model name (default: yiyanghkust/finbert-tone)
         """
         self.model_name = model_name
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        logger.info(f"Initializing FinBERT on device: {self.device}")
+        logger.info(f"Initializing FinBERT ({model_name}) on device: {self.device}")
         
         try:
             # Load tokenizer and model
+            logger.info("Loading tokenizer and model...")
             self.tokenizer = AutoTokenizer.from_pretrained(model_name)
             self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
+            self.model.to(self.device)
+            self.model.eval()
             
-            # Create pipeline for easier inference
-            self.classifier = pipeline(
-                "sentiment-analysis",
-                model=self.model,
-                tokenizer=self.tokenizer,
-                device=0 if self.device == "cuda" else -1,
-                return_all_scores=True
-            )
+            # Label mapping for the finbert-tone model
+            # The model outputs: 0=positive, 1=negative, 2=neutral
+            self.id2label = {0: "positive", 1: "negative", 2: "neutral"}
             
             logger.info("FinBERT model loaded successfully")
         except Exception as e:
@@ -47,60 +67,80 @@ class FinBERTAnalyzer:
     
     def analyze(self, text: str) -> Dict:
         """
-        Analyze sentiment of a single text
+        Analyze sentiment of a single text using FinBERT
         
         Args:
-            text: Input text to analyze
+            text: Input financial text to analyze
             
         Returns:
-            Dict with sentiment label, score, and confidence
+            Dict with sentiment label, sentiment_score (-1 to +1), and confidence
+            
+        Example:
+            >>> result = analyzer.analyze("Apple shares jump after record iPhone sales")
+            >>> print(result)
+            {'label': 'positive', 'sentiment_score': 0.82, 'confidence': 0.91}
         """
         if not text or not text.strip():
             return {
-                "label": "NEUTRAL",
-                "score": 0.5,
+                "label": "neutral",
+                "sentiment_score": 0.0,
                 "confidence": 0.0
             }
         
         try:
-            # Get predictions
-            results = self.classifier(text)
-            
-            # Get the highest confidence prediction
-            best_result = max(results[0], key=lambda x: x['score'])
-            
-            # Map FinBERT labels to our labels
-            label_map = {
-                "positive": "POSITIVE",
-                "negative": "NEGATIVE",
-                "neutral": "NEUTRAL"
-            }
-            
-            label = label_map.get(best_result['label'].lower(), "NEUTRAL")
-            confidence = best_result['score']
-            
-            # Calculate sentiment score (normalize to 0-1)
-            sentiment_score = self._calculate_sentiment_score(results[0])
-            
-            return {
-                "label": label,
-                "score": sentiment_score,
-                "confidence": confidence,
-                "model": self.model_name
-            }
-            
+            with torch.no_grad():
+                # Tokenize input
+                inputs = self.tokenizer(
+                    text,
+                    return_tensors="pt",
+                    truncation=True,
+                    max_length=512,
+                    padding=True
+                )
+                inputs = {k: v.to(self.device) for k, v in inputs.items()}
+                
+                # Get model predictions
+                outputs = self.model(**inputs)
+                logits = outputs.logits
+                
+                # Apply softmax to get probabilities
+                probabilities = torch.nn.functional.softmax(logits, dim=-1)
+                
+                # Get predicted class and confidence
+                max_prob, predicted_class = torch.max(probabilities, dim=-1)
+                max_prob = max_prob.item()
+                predicted_class = predicted_class.item()
+                
+                # Map to label
+                label = self.id2label.get(predicted_class, "neutral")
+                
+                # Calculate sentiment score in range -1.0 to +1.0
+                if label.lower() == "positive":
+                    sentiment_score = max_prob  # positive → +value
+                elif label.lower() == "negative":
+                    sentiment_score = -max_prob  # negative → -value
+                else:  # neutral
+                    sentiment_score = 0.0  # neutral → ≈0
+                
+                return {
+                    "label": label,
+                    "sentiment_score": round(sentiment_score, 4),
+                    "confidence": round(max_prob, 4),
+                    "model": self.model_name
+                }
+                
         except Exception as e:
             logger.error(f"Error analyzing text: {e}")
             return {
-                "label": "NEUTRAL",
-                "score": 0.5,
+                "label": "neutral",
+                "sentiment_score": 0.0,
                 "confidence": 0.0,
                 "error": str(e)
             }
     
     def analyze_batch(self, texts: List[str]) -> List[Dict]:
         """
-        Analyze sentiment of multiple texts
+        Analyze sentiment of multiple texts efficiently using batching
         
         Args:
             texts: List of texts to analyze
@@ -108,47 +148,169 @@ class FinBERTAnalyzer:
         Returns:
             List of sentiment analysis results
         """
+        if not texts:
+            return []
+        
+        try:
+            results = []
+            # Process texts in batches for efficiency
+            batch_size = 16
+            
+            for i in range(0, len(texts), batch_size):
+                batch_texts = texts[i:i + batch_size]
+                batch_results = self._analyze_batch_internal(batch_texts)
+                results.extend(batch_results)
+            
+            return results
+        except Exception as e:
+            logger.error(f"Error in batch analysis: {e}")
+            return [{"error": str(e)} for _ in texts]
+    
+    def _analyze_batch_internal(self, texts: List[str]) -> List[Dict]:
+        """Internal method to process a batch of texts"""
         results = []
+        
         for text in texts:
             result = self.analyze(text)
             results.append(result)
         
         return results
+
+
+class DatabaseManager:
+    """
+    Manages PostgreSQL connection and operations for sentiment results
+    """
     
-    def _calculate_sentiment_score(self, all_scores: List[Dict]) -> float:
+    def __init__(self, 
+                 host: str = "postgres",
+                 user: str = "postgres",
+                 password: str = "postgres",
+                 dbname: str = "sentiment_market",
+                 port: int = 5432):
         """
-        Calculate normalized sentiment score from all predictions
+        Initialize database connection
         
         Args:
-            all_scores: All sentiment scores from the model
+            host: Database host
+            user: Database user
+            password: Database password
+            dbname: Database name
+            port: Database port
+        """
+        self.connection_string = {
+            "host": host,
+            "user": user,
+            "password": password,
+            "dbname": dbname,
+            "port": port
+        }
+        self.conn = None
+        self._connect()
+    
+    def _connect(self):
+        """Establish database connection"""
+        try:
+            self.conn = psycopg2.connect(**self.connection_string)
+            logger.info("Connected to PostgreSQL database")
+        except Exception as e:
+            logger.error(f"Error connecting to database: {e}")
+            raise
+    
+    def save_sentiment_result(self, symbol: str, sentiment_score: float, 
+                             label: str, confidence: float) -> int:
+        """
+        Save sentiment analysis result to database
+        
+        Args:
+            symbol: Trading symbol (e.g., 'AAPL', 'BTCUSDT')
+            sentiment_score: Sentiment score (-1.0 to +1.0)
+            label: Sentiment label (positive/negative/neutral)
+            confidence: Confidence score (0.0 to 1.0)
             
         Returns:
-            Normalized score between 0 and 1
+            Inserted record ID
         """
         try:
-            # Create score mapping
-            score_dict = {score['label'].lower(): score['score'] for score in all_scores}
+            cur = self.conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO sentiment_results (symbol, sentiment_score, label, confidence, timestamp)
+                VALUES (%s, %s, %s, %s, NOW())
+                RETURNING id
+                """,
+                (symbol, sentiment_score, label.lower(), confidence)
+            )
+            result = cur.fetchone()
+            self.conn.commit()
+            cur.close()
             
-            positive = score_dict.get('positive', 0.0)
-            negative = score_dict.get('negative', 0.0)
-            neutral = score_dict.get('neutral', 0.0)
-            
-            # Weighted score calculation
-            # Higher weight on positive/negative, lower on neutral
-            weighted_score = (positive * 1.0) + (negative * -1.0) + (neutral * 0.0)
-            
-            # Normalize to 0-1 range
-            normalized_score = (weighted_score + 1) / 2
-            
-            return round(normalized_score, 4)
+            record_id = result[0] if result else None
+            logger.debug(f"Saved sentiment result for {symbol} with ID: {record_id}")
+            return record_id
             
         except Exception as e:
-            logger.error(f"Error calculating sentiment score: {e}")
-            return 0.5
+            logger.error(f"Error saving sentiment result: {e}")
+            self.conn.rollback()
+            return None
+    
+    def save_sentiment_batch(self, results: List[Dict]) -> int:
+        """
+        Save multiple sentiment results efficiently using batch insert
+        
+        Args:
+            results: List of result dictionaries with keys: symbol, sentiment_score, label, confidence
+            
+        Returns:
+            Number of records inserted
+        """
+        try:
+            cur = self.conn.cursor()
+            
+            # Prepare data for bulk insert
+            values = [
+                (
+                    r.get("symbol", "UNKNOWN"),
+                    r.get("sentiment_score", 0.0),
+                    r.get("label", "neutral").lower(),
+                    r.get("confidence", 0.0)
+                )
+                for r in results
+            ]
+            
+            execute_values(
+                cur,
+                """
+                INSERT INTO sentiment_results (symbol, sentiment_score, label, confidence, timestamp)
+                VALUES %s
+                """,
+                values,
+                page_size=100
+            )
+            
+            count = cur.rowcount
+            self.conn.commit()
+            cur.close()
+            
+            logger.info(f"Saved {count} sentiment results in batch")
+            return count
+            
+        except Exception as e:
+            logger.error(f"Error saving batch sentiment results: {e}")
+            self.conn.rollback()
+            return 0
+    
+    def close(self):
+        """Close database connection"""
+        if self.conn:
+            self.conn.close()
+            logger.info("Database connection closed")
 
 
-# Global analyzer instance
+# Global instances
 _analyzer: Optional[FinBERTAnalyzer] = None
+_db_manager: Optional[DatabaseManager] = None
+
 
 def get_analyzer() -> FinBERTAnalyzer:
     """Get or create the global FinBERT analyzer instance"""
@@ -158,25 +320,89 @@ def get_analyzer() -> FinBERTAnalyzer:
     return _analyzer
 
 
-# Example usage
+def get_db_manager() -> Optional[DatabaseManager]:
+    """Get or create the global database manager instance"""
+    global _db_manager
+    if _db_manager is None:
+        try:
+            _db_manager = DatabaseManager(
+                host=os.getenv("DB_HOST", "postgres"),
+                user=os.getenv("POSTGRES_USER", "postgres"),
+                password=os.getenv("POSTGRES_PASSWORD", "postgres"),
+                dbname=os.getenv("POSTGRES_DB", "sentiment_market"),
+                port=int(os.getenv("POSTGRES_PORT", "5432"))
+            )
+        except Exception as e:
+            logger.warning(f"Could not initialize database manager: {e}")
+            logger.warning("Running without database persistence")
+    return _db_manager
+
+
 if __name__ == "__main__":
-    # Test the analyzer
+    """
+    Example usage and testing
+    Run with: python ml_service/sentiment.py
+    """
+    import sys
+    from pathlib import Path
+    
+    # Add parent directory to path for imports
+    sys.path.insert(0, str(Path(__file__).parent))
+    
+    print("\n" + "="*70)
+    print("FinBERT Sentiment Analysis Module Test")
+    print("="*70)
+    
+    # Initialize analyzer
     analyzer = get_analyzer()
     
+    # Test texts
     test_texts = [
         "Apple reported record-breaking quarterly earnings, surpassing all analyst expectations.",
         "Tesla stock plummets as production delays mount and quality concerns grow.",
-        "The Federal Reserve announced no change to interest rates this month."
+        "The Federal Reserve announced no change to interest rates this month.",
+        "Bitcoin reached new all-time highs as institutional adoption continues to grow.",
+        "Market volatility spikes amid geopolitical tensions."
     ]
     
+    print("\nAnalyzing test texts...")
+    print("-"*70)
+    
+    for i, text in enumerate(test_texts, 1):
+        result = analyzer.analyze(text)
+        print(f"\n{i}. Text: {text[:60]}...")
+        print(f"   Label: {result['label']}")
+        print(f"   Sentiment Score: {result['sentiment_score']:.4f}")
+        print(f"   Confidence: {result['confidence']:.4f}")
+    
+    # Test batch processing
     print("\n" + "="*70)
-    print("FinBERT Sentiment Analysis Test Results")
+    print("Batch Processing Test")
     print("="*70)
     
-    for text in test_texts:
-        result = analyzer.analyze(text)
-        print(f"\nText: {text[:60]}...")
-        print(f"Label: {result['label']}")
-        print(f"Score: {result['score']}")
-        print(f"Confidence: {result['confidence']:.4f}")
-
+    batch_results = analyzer.analyze_batch(test_texts)
+    print(f"\nProcessed {len(batch_results)} texts in batch")
+    
+    # Database test (if available)
+    try:
+        db = get_db_manager()
+        if db:
+            print("\n" + "="*70)
+            print("Database Integration Test")
+            print("="*70)
+            
+            test_result = analyzer.analyze("Test sentiment analysis for database storage.")
+            record_id = db.save_sentiment_result(
+                symbol="TEST",
+                sentiment_score=test_result['sentiment_score'],
+                label=test_result['label'],
+                confidence=test_result['confidence']
+            )
+            print(f"Saved test result with ID: {record_id}")
+            db.close()
+    except Exception as e:
+        print(f"Database test failed: {e}")
+    
+    print("\n" + "="*70)
+    print("Test Complete")
+    print("="*70)

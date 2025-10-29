@@ -1,14 +1,42 @@
 """
-Hybrid Decision Engine
-Combines sentiment analysis and technical indicators to generate trading signals
+Hybrid AI Decision Engine
+Combines sentiment analysis and technical indicators to generate intelligent trading signals
+
+This module implements a hybrid decision system that merges sentiment and technical signals
+using adaptive weighting. The hybrid score is calculated as:
+
+hybrid_score = α * sentiment_score + β * technical_score
+
+where α (sentiment weight) defaults to 0.6 and β (technical weight) defaults to 0.4.
+
+Signal Generation Logic:
+- hybrid_score > 0.3  → BUY signal (bullish momentum)
+- hybrid_score < -0.3 → SELL signal (bearish momentum)
+- -0.3 ≤ hybrid_score ≤ 0.3 → HOLD signal (neutral)
+
+Confidence Calculation:
+confidence = (abs(sentiment_score) * α + abs(technical_score) * β)
+
+The module fetches the latest sentiment and technical data from PostgreSQL tables
+and generates comprehensive trading signals with human-readable reasoning.
 """
 
 import logging
-from typing import Dict, Optional
+import os
+import numpy as np
+from typing import Dict, Optional, Tuple
+from datetime import datetime
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from enum import Enum
 
-logging.basicConfig(level=logging.INFO)
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
+
 
 class Signal(Enum):
     """Trading signal types"""
@@ -16,179 +44,376 @@ class Signal(Enum):
     SELL = "SELL"
     HOLD = "HOLD"
 
+
 class HybridEngine:
-    """Hybrid AI Decision Engine combining sentiment and technical analysis"""
+    """
+    Hybrid AI Decision Engine combining sentiment and technical analysis
     
-    def __init__(self, sentiment_weight: float = 0.4, technical_weight: float = 0.6):
+    Fetches latest sentiment and technical data from PostgreSQL, computes
+    weighted hybrid score, and generates actionable trading signals.
+    """
+    
+    def __init__(self, sentiment_weight: float = 0.6, technical_weight: float = 0.4):
         """
         Initialize hybrid decision engine
         
         Args:
-            sentiment_weight: Weight for sentiment analysis (0-1)
-            technical_weight: Weight for technical indicators (0-1)
+            sentiment_weight: Weight α for sentiment analysis (default: 0.6)
+            technical_weight: Weight β for technical indicators (default: 0.4)
         """
-        self.sentiment_weight = sentiment_weight
-        self.technical_weight = technical_weight
+        self.alpha = sentiment_weight
+        self.beta = technical_weight
         
         # Normalize weights to sum to 1
         total_weight = sentiment_weight + technical_weight
         if total_weight > 0:
-            self.sentiment_weight = sentiment_weight / total_weight
-            self.technical_weight = technical_weight / total_weight
+            self.alpha = sentiment_weight / total_weight
+            self.beta = technical_weight / total_weight
         else:
-            self.sentiment_weight = 0.5
-            self.technical_weight = 0.5
+            self.alpha = 0.6
+            self.beta = 0.4
         
         logger.info(f"Hybrid Engine initialized with weights - "
-                   f"Sentiment: {self.sentiment_weight:.2f}, "
-                   f"Technical: {self.technical_weight:.2f}")
+                   f"α (sentiment): {self.alpha:.2f}, "
+                   f"β (technical): {self.beta:.2f}")
     
-    def generate_signal(self, 
-                       sentiment_score: float,
-                       technical_score: float,
-                       sentiment_confidence: float = 1.0,
-                       technical_confidence: float = 1.0) -> Dict:
+    def fetch_sentiment_data(self, symbol: str, db_conn) -> Optional[Dict]:
         """
-        Generate trading signal based on hybrid analysis
+        Fetch latest sentiment data for a symbol from PostgreSQL
         
         Args:
-            sentiment_score: Sentiment score (0-1, 0.5=neutral)
-            technical_score: Technical score (0-1, 0.5=neutral)
-            sentiment_confidence: Confidence in sentiment (0-1)
-            technical_confidence: Confidence in technical (0-1)
+            symbol: Trading symbol to fetch data for
+            db_conn: PostgreSQL connection object
             
         Returns:
-            Dict with signal, hybrid score, reason, and confidence
+            Dict with sentiment data or None if not found
         """
         try:
-            # Adjust weights based on confidence
-            adjusted_sentiment_weight = self.sentiment_weight * sentiment_confidence
-            adjusted_technical_weight = self.technical_weight * technical_confidence
-            
-            total_adjusted = adjusted_sentiment_weight + adjusted_technical_weight
-            if total_adjusted > 0:
-                final_sentiment_weight = adjusted_sentiment_weight / total_adjusted
-                final_technical_weight = adjusted_technical_weight / total_adjusted
-            else:
-                final_sentiment_weight = 0.5
-                final_technical_weight = 0.5
-            
-            # Calculate hybrid score
-            hybrid_score = (
-                sentiment_score * final_sentiment_weight +
-                technical_score * final_technical_weight
+            cur = db_conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute(
+                """
+                SELECT symbol, sentiment_score, label, confidence, timestamp
+                FROM sentiment_results
+                WHERE symbol = %s
+                ORDER BY timestamp DESC
+                LIMIT 1
+                """,
+                (symbol,)
             )
+            result = cur.fetchone()
+            cur.close()
             
-            # Generate signal based on hybrid score
-            if hybrid_score >= 0.65:
-                signal = Signal.BUY
-                signal_str = "BUY"
-                reason = self._generate_reason(sentiment_score, technical_score, "bullish")
-                confidence = min(hybrid_score, 0.95)
-            elif hybrid_score <= 0.35:
-                signal = Signal.SELL
-                signal_str = "SELL"
-                reason = self._generate_reason(sentiment_score, technical_score, "bearish")
-                confidence = min(1 - hybrid_score, 0.95)
+            if result:
+                logger.debug(f"Fetched sentiment data for {symbol}")
+                return dict(result)
             else:
-                signal = Signal.HOLD
-                signal_str = "HOLD"
-                reason = self._generate_reason(sentiment_score, technical_score, "neutral")
-                confidence = 0.5
+                logger.warning(f"No sentiment data found for {symbol}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error fetching sentiment data for {symbol}: {e}")
+            return None
+    
+    def fetch_technical_data(self, symbol: str, db_conn) -> Optional[Dict]:
+        """
+        Fetch latest technical data for a symbol from PostgreSQL
+        
+        Args:
+            symbol: Trading symbol to fetch data for
+            db_conn: PostgreSQL connection object
             
-            return {
-                "signal": signal_str,
-                "hybrid_score": round(hybrid_score, 4),
-                "confidence": round(confidence, 4),
-                "reason": reason,
-                "sentiment_score": round(sentiment_score, 4),
-                "technical_score": round(technical_score, 4),
-                "weight_used": {
-                    "sentiment": round(final_sentiment_weight, 4),
-                    "technical": round(final_technical_weight, 4)
-                }
-            }
+        Returns:
+            Dict with technical data or None if not found
+        """
+        try:
+            cur = db_conn.cursor(cursor_factory=RealDictCursor)
+            cur.execute(
+                """
+                SELECT symbol, ema20, ema50, rsi, macd, technical_score, timestamp
+                FROM technical_indicators
+                WHERE symbol = %s
+                ORDER BY timestamp DESC
+                LIMIT 1
+                """,
+                (symbol,)
+            )
+            result = cur.fetchone()
+            cur.close()
+            
+            if result:
+                logger.debug(f"Fetched technical data for {symbol}")
+                return dict(result)
+            else:
+                logger.warning(f"No technical data found for {symbol}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error fetching technical data for {symbol}: {e}")
+            return None
+    
+    def compute_hybrid_score(self, sentiment_score: float, 
+                            technical_score: float) -> float:
+        """
+        Compute hybrid score using weighted combination
+        
+        Formula: hybrid_score = α * sentiment_score + β * technical_score
+        
+        Args:
+            sentiment_score: Sentiment score (-1.0 to +1.0)
+            technical_score: Technical score (-1.0 to +1.0)
+            
+        Returns:
+            Hybrid score in range -1.0 to +1.0
+        """
+        try:
+            hybrid_score = (self.alpha * sentiment_score) + (self.beta * technical_score)
+            return round(hybrid_score, 4)
+        except Exception as e:
+            logger.error(f"Error computing hybrid score: {e}")
+            return 0.0
+    
+    def compute_confidence(self, sentiment_score: float, 
+                          technical_score: float) -> float:
+        """
+        Compute confidence based on weighted absolute values
+        
+        Formula: confidence = (abs(sentiment_score) * α + abs(technical_score) * β)
+        
+        Args:
+            sentiment_score: Sentiment score
+            technical_score: Technical score
+            
+        Returns:
+            Confidence score (0.0 to 1.0)
+        """
+        try:
+            confidence = (abs(sentiment_score) * self.alpha) + (abs(technical_score) * self.beta)
+            # Clamp to 0-1 range
+            confidence = max(0.0, min(1.0, confidence))
+            return round(confidence, 4)
+        except Exception as e:
+            logger.error(f"Error computing confidence: {e}")
+            return 0.5
+    
+    def generate_signal(self, hybrid_score: float) -> Tuple[str, str]:
+        """
+        Generate trading signal based on hybrid score thresholds
+        
+        Args:
+            hybrid_score: Hybrid score (-1.0 to +1.0)
+            
+        Returns:
+            Tuple of (signal, reason)
+        """
+        try:
+            if hybrid_score > 0.3:
+                signal = "BUY"
+                reason = self._generate_buy_reason(hybrid_score)
+            elif hybrid_score < -0.3:
+                signal = "SELL"
+                reason = self._generate_sell_reason(hybrid_score)
+            else:
+                signal = "HOLD"
+                reason = self._generate_hold_reason(hybrid_score)
+            
+            return signal, reason
             
         except Exception as e:
             logger.error(f"Error generating signal: {e}")
-            return {
-                "signal": "HOLD",
-                "hybrid_score": 0.5,
-                "confidence": 0.0,
-                "reason": "Error in signal generation",
-                "error": str(e)
-            }
+            return "HOLD", "Error in signal generation"
     
-    def _generate_reason(self, 
-                        sentiment_score: float, 
-                        technical_score: float,
-                        overall_trend: str) -> str:
+    def _generate_buy_reason(self, hybrid_score: float) -> str:
+        """Generate reason for BUY signal"""
+        if hybrid_score > 0.7:
+            return "Strong bullish momentum with very positive sentiment and technical indicators"
+        elif hybrid_score > 0.5:
+            return "Positive sentiment and bullish technical indicators suggesting upward trend"
+        else:
+            return "Moderate positive sentiment with favorable technical setup"
+    
+    def _generate_sell_reason(self, hybrid_score: float) -> str:
+        """Generate reason for SELL signal"""
+        if hybrid_score < -0.7:
+            return "Strong bearish momentum with negative sentiment and weak technical indicators"
+        elif hybrid_score < -0.5:
+            return "Negative sentiment and bearish technical indicators suggesting downward trend"
+        else:
+            return "Moderate negative sentiment with unfavorable technical setup"
+    
+    def _generate_hold_reason(self, hybrid_score: float) -> str:
+        """Generate reason for HOLD signal"""
+        if abs(hybrid_score) < 0.1:
+            return "Neutral sentiment and technical indicators showing balanced market conditions"
+        else:
+            return "Mixed signals with sentiment and technical indicators showing conflicting trends"
+    
+    def analyze_symbol(self, symbol: str, db_conn) -> Dict:
         """
-        Generate human-readable reason for the signal
+        Complete hybrid analysis for a symbol
+        
+        Fetches sentiment and technical data, computes hybrid score,
+        generates signal, and returns comprehensive result.
         
         Args:
-            sentiment_score: Sentiment score (0-1)
-            technical_score: Technical score (0-1)
-            overall_trend: Overall market trend (bullish/bearish/neutral)
+            symbol: Trading symbol to analyze
+            db_conn: PostgreSQL connection object
             
         Returns:
-            Human-readable reason string
+            Dict with complete analysis results
         """
-        reasons = []
-        
-        # Sentiment reason
-        if sentiment_score >= 0.7:
-            reasons.append("Strong positive sentiment")
-        elif sentiment_score >= 0.6:
-            reasons.append("Moderately positive sentiment")
-        elif sentiment_score <= 0.3:
-            reasons.append("Strong negative sentiment")
-        elif sentiment_score <= 0.4:
-            reasons.append("Moderately negative sentiment")
-        else:
-            reasons.append("Neutral sentiment")
-        
-        # Technical reason
-        if technical_score >= 0.7:
-            reasons.append("strong technical indicators")
-        elif technical_score >= 0.6:
-            reasons.append("favorable technical setup")
-        elif technical_score <= 0.3:
-            reasons.append("weak technical indicators")
-        elif technical_score <= 0.4:
-            reasons.append("unfavorable technical setup")
-        else:
-            reasons.append("mixed technical signals")
-        
-        reason = f"{reasons[0]} with {reasons[1]} suggesting {overall_trend} momentum"
-        
-        return reason
+        try:
+            # Fetch latest data
+            sentiment_data = self.fetch_sentiment_data(symbol, db_conn)
+            technical_data = self.fetch_technical_data(symbol, db_conn)
+            
+            # Check if we have sufficient data
+            if sentiment_data is None and technical_data is None:
+                return {
+                    "symbol": symbol,
+                    "error": "No sentiment or technical data available",
+                    "sentiment_score": None,
+                    "technical_score": None,
+                    "hybrid_score": 0.0,
+                    "signal": "HOLD",
+                    "confidence": 0.0,
+                    "reason": "Insufficient data for analysis"
+                }
+            
+            # Extract scores (handle missing data)
+            sentiment_score = sentiment_data.get('sentiment_score', 0.0) if sentiment_data else 0.0
+            technical_score = technical_data.get('technical_score', 0.0) if technical_data else 0.0
+            
+            # If only one data source, use it with reduced confidence
+            if sentiment_data is None:
+                hybrid_score = technical_score
+                confidence = 0.5  # Reduced confidence
+                reason_base = "Technical analysis only"
+            elif technical_data is None:
+                hybrid_score = sentiment_score
+                confidence = 0.5  # Reduced confidence
+                reason_base = "Sentiment analysis only"
+            else:
+                # Compute hybrid score using both sources
+                hybrid_score = self.compute_hybrid_score(sentiment_score, technical_score)
+                confidence = self.compute_confidence(sentiment_score, technical_score)
+                reason_base = f"Sentiment score: {sentiment_score:.2f}, Technical score: {technical_score:.2f}"
+            
+            # Generate signal
+            signal, reason = self.generate_signal(hybrid_score)
+            
+            # Combine reason base with signal-specific reason
+            full_reason = f"{reason_base}. {reason}"
+            
+            return {
+                "symbol": symbol,
+                "sentiment_score": sentiment_score if sentiment_data else None,
+                "technical_score": technical_score if technical_data else None,
+                "hybrid_score": hybrid_score,
+                "signal": signal,
+                "confidence": confidence,
+                "reason": full_reason
+            }
+            
+        except Exception as e:
+            logger.error(f"Error analyzing symbol {symbol}: {e}")
+            return {
+                "symbol": symbol,
+                "error": str(e),
+                "sentiment_score": None,
+                "technical_score": None,
+                "hybrid_score": 0.0,
+                "signal": "HOLD",
+                "confidence": 0.0,
+                "reason": "Error in analysis"
+            }
+
+
+class HybridDBManager:
+    """
+    Manages PostgreSQL operations for hybrid signals
+    """
     
-    def adjust_weights(self, sentiment_weight: float, technical_weight: float):
+    def __init__(self, 
+                 host: str = "postgres",
+                 user: str = "postgres",
+                 password: str = "postgres",
+                 dbname: str = "sentiment_market",
+                 port: int = 5432):
+        """Initialize database connection"""
+        self.connection_string = {
+            "host": host,
+            "user": user,
+            "password": password,
+            "dbname": dbname,
+            "port": port
+        }
+        self.conn = None
+        self._connect()
+    
+    def _connect(self):
+        """Establish database connection"""
+        try:
+            self.conn = psycopg2.connect(**self.connection_string)
+            logger.info("Connected to PostgreSQL database (Hybrid Signals)")
+        except Exception as e:
+            logger.error(f"Error connecting to database: {e}")
+            raise
+    
+    def save_hybrid_signal(self, symbol: str, sentiment_score: float,
+                           technical_score: float, hybrid_score: float,
+                           signal: str, reason: str, confidence: float) -> int:
         """
-        Dynamically adjust weights based on market conditions
+        Save hybrid signal to database
         
         Args:
-            sentiment_weight: New sentiment weight
-            technical_weight: New technical weight
+            symbol: Trading symbol
+            sentiment_score: Sentiment score
+            technical_score: Technical score
+            hybrid_score: Hybrid score
+            signal: Trading signal (BUY/SELL/HOLD)
+            reason: Signal reasoning
+            confidence: Confidence score
+            
+        Returns:
+            Inserted record ID
         """
-        self.sentiment_weight = sentiment_weight
-        self.technical_weight = technical_weight
-        
-        # Normalize
-        total_weight = sentiment_weight + technical_weight
-        if total_weight > 0:
-            self.sentiment_weight = sentiment_weight / total_weight
-            self.technical_weight = technical_weight / total_weight
-        
-        logger.info(f"Weights adjusted - Sentiment: {self.sentiment_weight:.2f}, "
-                   f"Technical: {self.technical_weight:.2f}")
+        try:
+            cur = self.conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO hybrid_signals 
+                (symbol, sentiment_score, technical_score, hybrid_score, signal, reason, confidence, timestamp)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                RETURNING id
+                """,
+                (symbol, sentiment_score, technical_score, hybrid_score, signal, reason, confidence)
+            )
+            result = cur.fetchone()
+            self.conn.commit()
+            cur.close()
+            
+            record_id = result[0] if result else None
+            logger.debug(f"Saved hybrid signal for {symbol} with ID: {record_id}")
+            return record_id
+            
+        except Exception as e:
+            logger.error(f"Error saving hybrid signal: {e}")
+            self.conn.rollback()
+            return None
+    
+    def close(self):
+        """Close database connection"""
+        if self.conn:
+            self.conn.close()
+            logger.info("Database connection closed (Hybrid Signals)")
 
 
-# Global instance
+# Global instances
 _engine: Optional[HybridEngine] = None
+_db_manager: Optional[HybridDBManager] = None
 
-def get_engine(sentiment_weight: float = 0.4, technical_weight: float = 0.6) -> HybridEngine:
+
+def get_engine(sentiment_weight: float = 0.6, technical_weight: float = 0.4) -> HybridEngine:
     """Get or create the global hybrid engine instance"""
     global _engine
     if _engine is None:
@@ -196,33 +421,68 @@ def get_engine(sentiment_weight: float = 0.4, technical_weight: float = 0.6) -> 
     return _engine
 
 
-# Example usage
+def get_db_manager() -> Optional[HybridDBManager]:
+    """Get or create the global database manager instance"""
+    global _db_manager
+    if _db_manager is None:
+        try:
+            _db_manager = HybridDBManager(
+                host=os.getenv("DB_HOST", "postgres"),
+                user=os.getenv("POSTGRES_USER", "postgres"),
+                password=os.getenv("POSTGRES_PASSWORD", "postgres"),
+                dbname=os.getenv("POSTGRES_DB", "sentiment_market"),
+                port=int(os.getenv("POSTGRES_PORT", "5432"))
+            )
+        except Exception as e:
+            logger.warning(f"Could not initialize hybrid database manager: {e}")
+            logger.warning("Running without database persistence")
+    return _db_manager
+
+
 if __name__ == "__main__":
-    # Initialize engine
-    engine = get_engine(sentiment_weight=0.4, technical_weight=0.6)
+    """
+    Example usage and testing
+    Run with: python ml_service/hybrid_engine.py
+    """
+    import sys
+    from pathlib import Path
     
-    # Test scenarios
-    test_cases = [
-        {"sentiment": 0.85, "technical": 0.75, "name": "Strong Buy"},
-        {"sentiment": 0.25, "technical": 0.20, "name": "Strong Sell"},
-        {"sentiment": 0.55, "technical": 0.52, "name": "Hold"},
-        {"sentiment": 0.90, "technical": 0.30, "name": "Mixed Signals"},
-        {"sentiment": 0.30, "technical": 0.90, "name": "Technical Override"},
-    ]
+    sys.path.insert(0, str(Path(__file__).parent))
     
     print("\n" + "="*70)
-    print("Hybrid Decision Engine Test Results")
+    print("Hybrid AI Decision Engine Test")
     print("="*70)
     
-    for case in test_cases:
-        result = engine.generate_signal(
-            sentiment_score=case['sentiment'],
-            technical_score=case['technical']
-        )
+    # Initialize engine
+    engine = get_engine(sentiment_weight=0.6, technical_weight=0.4)
+    db = get_db_manager()
+    
+    if not db:
+        print("❌ Database connection failed. Please ensure PostgreSQL is running.")
+        sys.exit(1)
+    
+    # Test symbols
+    test_symbols = ["AAPL", "BTC-USD", "ETH-USD"]
+    
+    print("\nAnalyzing symbols...")
+    print("-"*70)
+    
+    for symbol in test_symbols:
+        print(f"\nSymbol: {symbol}")
+        result = engine.analyze_symbol(symbol, db.conn)
         
-        print(f"\n{case['name']}")
-        print(f"  Sentiment: {case['sentiment']:.2f}, Technical: {case['technical']:.2f}")
-        print(f"  Signal: {result['signal']} (Hybrid Score: {result['hybrid_score']:.4f})")
-        print(f"  Confidence: {result['confidence']:.4f}")
-        print(f"  Reason: {result['reason']}")
-
+        if "error" not in result:
+            print(f"  Sentiment Score: {result['sentiment_score']:.4f if result['sentiment_score'] is not None else 'N/A'}")
+            print(f"  Technical Score: {result['technical_score']:.4f if result['technical_score'] is not None else 'N/A'}")
+            print(f"  Hybrid Score: {result['hybrid_score']:.4f}")
+            print(f"  Signal: {result['signal']}")
+            print(f"  Confidence: {result['confidence']:.4f}")
+            print(f"  Reason: {result['reason']}")
+        else:
+            print(f"  Error: {result['error']}")
+    
+    db.close()
+    
+    print("\n" + "="*70)
+    print("Test Complete")
+    print("="*70)
