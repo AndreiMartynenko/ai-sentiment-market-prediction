@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from ml_service.sentiment import get_analyzer, FinBERTAnalyzer, get_db_manager as get_sentiment_db
 from ml_service.indicators import get_indicators, TechnicalIndicators, get_db_manager as get_technical_db
 from ml_service.hybrid_engine import get_engine, HybridEngine, get_db_manager as get_hybrid_db
+from ml_service.solana_layer import send_proof
 from ml_service.crypto_data import get_crypto_data_manager
 
 # Setup logging
@@ -122,6 +123,25 @@ class HealthResponse(BaseModel):
     sentiment_db_connected: bool
     technical_db_connected: bool
     hybrid_db_connected: bool
+
+# ---- Proof-of-Signal Endpoint ----
+@app.post("/proof")
+async def publish_proof(signal: dict):
+    """
+    Publish AI signal proof to Solana (testnet).
+    Returns proof hash and transaction signature with explorer URL.
+    """
+    try:
+        result = send_proof(signal)
+        return {
+            "message": "Signal published to Solana",
+            "proof_hash": result["proof_hash"],
+            "tx_signature": result["tx_signature"],
+            "explorer_url": f"https://explorer.solana.com/tx/{result['tx_signature']}?cluster=testnet",
+        }
+    except Exception as e:
+        logger.error(f"Error publishing proof: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Root endpoint
 @app.get("/")

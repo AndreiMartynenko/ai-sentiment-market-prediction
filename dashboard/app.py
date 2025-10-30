@@ -12,6 +12,7 @@ from psycopg2.extras import RealDictCursor
 from datetime import datetime, timedelta
 import os
 import numpy as np
+import requests
 
 # Page configuration
 st.set_page_config(
@@ -485,6 +486,40 @@ with tab4:
             st.metric("SELL Signals", sell_count)
     else:
         st.info("No hybrid signals available for the selected symbol")
+
+# --- Proof-of-Signal (On-Chain Verification) ---
+st.markdown("---")
+st.header("🔗 Proof-of-Signal (On-Chain Verification)")
+
+col_ps1, col_ps2 = st.columns([2, 1])
+with col_ps1:
+    pos_symbol = st.selectbox("Select Symbol", ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT"], index=0)
+    st.caption("Publish the latest AI signal for this symbol to Solana testnet.")
+
+with col_ps2:
+    publish_clicked = st.button("Publish Latest Signal to Solana", type="primary")
+
+if publish_clicked:
+    # Example payload; in a production flow this would be the latest computed signal
+    signal_data = {
+        "symbol": pos_symbol,
+        "signal": "BUY",
+        "sentiment_score": 0.82,
+        "technical_score": 0.41,
+        "reason": "Positive sentiment + RSI oversold",
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+    try:
+        ml_url = os.getenv("ML_SERVICE_URL", "http://localhost:8000")
+        res = requests.post(f"{ml_url}/proof", json=signal_data, timeout=15)
+        if res.status_code == 200:
+            data = res.json()
+            st.success(f"Signal published! [View on Solana Explorer]({data['explorer_url']})")
+            st.json(data)
+        else:
+            st.error(res.text)
+    except Exception as e:
+        st.error(f"Error publishing proof: {e}")
 
 # Footer
 st.markdown("---")

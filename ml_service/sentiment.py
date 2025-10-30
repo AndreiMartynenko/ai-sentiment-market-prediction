@@ -69,14 +69,14 @@ class FinBERTAnalyzer:
                 "institutional", "etf", "halving", "burn", "deflationary", "hodl",
                 "diamond hands", "to the moon", "bull run", "green", "gains"
             ]
-        
-        self.crypto_negative_keywords = [
-            "dump", "crash", "bearish", "fud", "panic", "sell-off", "correction",
-            "bubble", "scam", "rug pull", "hack", "exploit", "bear market",
-            "red", "losses", "fear", "uncertainty", "doubt"
-        ]
-        
-        logger.info("Crypto-focused FinBERT model loaded successfully")
+            
+            self.crypto_negative_keywords = [
+                "dump", "crash", "bearish", "fud", "panic", "sell-off", "correction",
+                "bubble", "scam", "rug pull", "hack", "exploit", "bear market",
+                "red", "losses", "fear", "uncertainty", "doubt"
+            ]
+            
+            logger.info("Crypto-focused FinBERT model loaded successfully")
         except Exception as e:
             logger.error(f"Error loading FinBERT model: {e}")
             raise
