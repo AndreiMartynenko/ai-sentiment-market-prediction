@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS hybrid_signals (
     confidence DECIMAL(5, 4) NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
     volatility_index DECIMAL(10, 8) CHECK (volatility_index >= -1 AND volatility_index <= 1),
     reason TEXT,
+    proof_hash VARCHAR(64),
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
@@ -101,7 +102,8 @@ CREATE TABLE IF NOT EXISTS hybrid_signals (
     INDEX idx_signals_symbol (symbol),
     INDEX idx_signals_signal (signal),
     INDEX idx_signals_timestamp (timestamp),
-    INDEX idx_signals_created (created_at)
+    INDEX idx_signals_created (created_at),
+    INDEX idx_signals_proof_hash (proof_hash)
 );
 
 -- Table: crypto_news

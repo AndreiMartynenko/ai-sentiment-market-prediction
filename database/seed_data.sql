@@ -25,6 +25,18 @@ INSERT INTO market_data (symbol, open, high, low, close, volume, timestamp) VALU
 ('ETHUSDT', 3550.00, 3620.00, 3530.00, 3600.00, 640000000.00, NOW())
 ON CONFLICT (symbol, timestamp) DO NOTHING;
 
+-- Seed market data for Solana
+INSERT INTO market_data (symbol, open, high, low, close, volume, timestamp) VALUES
+('SOLUSDT', 120.00, 125.00, 118.00, 123.00, 234567890.00, NOW() - INTERVAL '7 days'),
+('SOLUSDT', 123.00, 128.00, 121.00, 126.00, 240000000.00, NOW() - INTERVAL '6 days'),
+('SOLUSDT', 126.00, 131.00, 124.00, 129.00, 250000000.00, NOW() - INTERVAL '5 days'),
+('SOLUSDT', 129.00, 134.00, 127.00, 132.00, 255000000.00, NOW() - INTERVAL '4 days'),
+('SOLUSDT', 132.00, 137.00, 130.00, 135.00, 260000000.00, NOW() - INTERVAL '3 days'),
+('SOLUSDT', 135.00, 140.00, 133.00, 138.00, 265000000.00, NOW() - INTERVAL '2 days'),
+('SOLUSDT', 138.00, 143.00, 136.00, 141.00, 270000000.00, NOW() - INTERVAL '1 day'),
+('SOLUSDT', 141.00, 146.00, 139.00, 144.00, 275000000.00, NOW())
+ON CONFLICT (symbol, timestamp) DO NOTHING;
+
 -- Seed news articles
 INSERT INTO news_raw (symbol, title, text, source, timestamp) VALUES
 ('BTCUSDT', 'Institutional Investors Increasing Bitcoin Holdings', 'Large institutional investors have significantly increased their Bitcoin holdings this quarter, driving up demand and prices.', 'CryptoNews', NOW() - INTERVAL '1 day'),
@@ -40,7 +52,9 @@ INSERT INTO sentiment_results (symbol, sentiment_score, label, confidence, times
 ('BTCUSDT', 0.82, 'POSITIVE', 0.88, NOW() - INTERVAL '18 hours'),
 ('BTCUSDT', 0.68, 'POSITIVE', 0.85, NOW() - INTERVAL '12 hours'),
 ('ETHUSDT', 0.70, 'POSITIVE', 0.90, NOW() - INTERVAL '1 day'),
-('ETHUSDT', 0.78, 'POSITIVE', 0.87, NOW() - INTERVAL '16 hours')
+('ETHUSDT', 0.78, 'POSITIVE', 0.87, NOW() - INTERVAL '16 hours'),
+('SOLUSDT', 0.73, 'POSITIVE', 0.89, NOW() - INTERVAL '1 day'),
+('SOLUSDT', 0.81, 'POSITIVE', 0.86, NOW() - INTERVAL '15 hours')
 ON CONFLICT DO NOTHING;
 
 -- Seed technical indicators
@@ -49,13 +63,16 @@ INSERT INTO technical_indicators (symbol, ema20, ema50, rsi, macd, technical_sco
 ('BTCUSDT', 48800.00, 47200.00, 68.2, 1350.75, 0.72, NOW() - INTERVAL '12 hours'),
 ('BTCUSDT', 49200.00, 47500.00, 70.8, 1450.00, 0.75, NOW()),
 ('ETHUSDT', 3450.00, 3350.00, 62.3, 48.25, 0.65, NOW() - INTERVAL '1 day'),
-('ETHUSDT', 3500.00, 3370.00, 64.7, 52.30, 0.68, NOW())
+('ETHUSDT', 3500.00, 3370.00, 64.7, 52.30, 0.68, NOW()),
+('SOLUSDT', 135.00, 130.00, 66.8, 3.25, 0.70, NOW() - INTERVAL '1 day'),
+('SOLUSDT', 138.00, 132.00, 68.4, 3.75, 0.73, NOW())
 ON CONFLICT (symbol, timestamp) DO NOTHING;
 
 -- Seed hybrid signals
 INSERT INTO hybrid_signals (symbol, signal, hybrid_score, confidence, reason, timestamp) VALUES
 ('BTCUSDT', 'BUY', 0.71, 0.82, 'Strong positive sentiment with favorable technical setup suggesting bullish momentum', NOW() - INTERVAL '1 day'),
 ('BTCUSDT', 'BUY', 0.77, 0.85, 'Strong positive sentiment with strong technical indicators suggesting bullish momentum', NOW() - INTERVAL '12 hours'),
-('ETHUSDT', 'BUY', 0.67, 0.78, 'Moderately positive sentiment with favorable technical setup suggesting bullish momentum', NOW() - INTERVAL '1 day')
+('ETHUSDT', 'BUY', 0.67, 0.78, 'Moderately positive sentiment with favorable technical setup suggesting bullish momentum', NOW() - INTERVAL '1 day'),
+('SOLUSDT', 'BUY', 0.72, 0.80, 'Strong positive sentiment with favorable technical indicators suggesting bullish momentum', NOW() - INTERVAL '1 day')
 ON CONFLICT DO NOTHING;
 
