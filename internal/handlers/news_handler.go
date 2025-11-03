@@ -16,6 +16,7 @@ type NewsHandler struct {
 	service *services.NewsService
 }
 
+// NewNewsHandler creates a new NewsHandler with the given NewsService
 func NewNewsHandler(service *services.NewsService) *NewsHandler {
 	return &NewsHandler{
 		service: service,
