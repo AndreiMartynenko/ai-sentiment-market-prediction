@@ -12,6 +12,7 @@ type SentimentHandler struct {
 	service *services.SentimentService
 }
 
+// NewSentimentHandler creates a new SentimentHandler with the given SentimentService
 func NewSentimentHandler(service *services.SentimentService) *SentimentHandler {
 	return &SentimentHandler{
 		service: service,
