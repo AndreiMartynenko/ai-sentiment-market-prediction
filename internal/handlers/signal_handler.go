@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// SignalHandler handles signal-related requests
 type SignalHandler struct {
 	service *services.SignalService
 }
