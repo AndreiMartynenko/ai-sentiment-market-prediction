@@ -437,7 +437,9 @@ class HybridDBManager:
     
     def save_hybrid_signal(self, symbol: str, sentiment_score: float,
                            technical_score: float, hybrid_score: float,
-                           signal: str, reason: str, confidence: float) -> int:
+                           signal: str, reason: str, confidence: float,
+                           proof_hash: Optional[str] = None,
+                           tx_signature: Optional[str] = None) -> int:
         """
         Save hybrid signal to database
         
@@ -449,6 +451,8 @@ class HybridDBManager:
             signal: Trading signal (BUY/SELL/HOLD)
             reason: Signal reasoning
             confidence: Confidence score
+            proof_hash: Optional proof hash from Solana
+            tx_signature: Optional transaction signature from Solana
             
         Returns:
             Inserted record ID
@@ -458,11 +462,11 @@ class HybridDBManager:
             cur.execute(
                 """
                 INSERT INTO hybrid_signals 
-                (symbol, sentiment_score, technical_score, hybrid_score, signal, reason, confidence, timestamp)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                (symbol, sentiment_score, technical_score, hybrid_score, signal, reason, confidence, proof_hash, tx_signature, timestamp)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                 RETURNING id
                 """,
-                (symbol, sentiment_score, technical_score, hybrid_score, signal, reason, confidence)
+                (symbol, sentiment_score, technical_score, hybrid_score, signal, reason, confidence, proof_hash, tx_signature)
             )
             result = cur.fetchone()
             self.conn.commit()

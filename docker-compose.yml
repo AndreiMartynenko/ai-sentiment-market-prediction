@@ -70,7 +70,7 @@ services:
       - ./models:/app/models
       - ./logs:/app/logs
 
-  # Streamlit Dashboard
+  # Streamlit Dashboard (Homepage)
   dashboard:
     build:
       context: .
@@ -97,6 +97,7 @@ services:
       - sentiment_network
     volumes:
       - ./dashboard:/app/dashboard
+    command: streamlit run dashboard/homepage.py --server.port 8501 --server.address 0.0.0.0
 
 networks:
   sentiment_network:

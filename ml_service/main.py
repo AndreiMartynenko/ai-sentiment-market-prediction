@@ -10,6 +10,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from psycopg2.extras import RealDictCursor
 
 from ml_service.sentiment import get_analyzer, FinBERTAnalyzer, get_db_manager as get_sentiment_db
 from ml_service.indicators import get_indicators, TechnicalIndicators, get_db_manager as get_technical_db
@@ -114,6 +115,8 @@ class HybridResponse(BaseModel):
     signal: str
     confidence: float
     reason: str
+    proof_hash: Optional[str] = None
+    tx_signature: Optional[str] = None
 
 class HealthResponse(BaseModel):
     status: str
@@ -356,6 +359,23 @@ async def generate_hybrid_signal(request: HybridRequest):
         # Save to database if we have valid data
         if result.get('sentiment_score') is not None or result.get('technical_score') is not None:
             try:
+                # Try to publish to Solana and get proof
+                proof_hash = None
+                tx_signature = None
+                try:
+                    solana_result = send_proof({
+                        "symbol": result['symbol'],
+                        "signal": result['signal'],
+                        "hybrid_score": result['hybrid_score'],
+                        "confidence": result['confidence'],
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    proof_hash = solana_result.get("proof_hash")
+                    tx_signature = solana_result.get("tx_signature")
+                    logger.info(f"Published signal to Solana: {tx_signature}")
+                except Exception as solana_error:
+                    logger.warning(f"Could not publish to Solana: {solana_error}")
+                
                 hybrid_db.save_hybrid_signal(
                     symbol=result['symbol'],
                     sentiment_score=result['sentiment_score'] or 0.0,
@@ -363,11 +383,14 @@ async def generate_hybrid_signal(request: HybridRequest):
                     hybrid_score=result['hybrid_score'],
                     signal=result['signal'],
                     reason=result['reason'],
-                    confidence=result['confidence']
+                    confidence=result['confidence'],
+                    proof_hash=proof_hash,
+                    tx_signature=tx_signature
                 )
             except Exception as db_error:
                 logger.warning(f"Could not save to hybrid database: {db_error}")
         
+        # Get the saved signal with Solana data
         return HybridResponse(
             symbol=result['symbol'],
             sentiment_score=result.get('sentiment_score'),
@@ -375,7 +398,9 @@ async def generate_hybrid_signal(request: HybridRequest):
             hybrid_score=result['hybrid_score'],
             signal=result['signal'],
             confidence=result['confidence'],
-            reason=result['reason']
+            reason=result['reason'],
+            proof_hash=proof_hash,
+            tx_signature=tx_signature
         )
         
     except HTTPException:
@@ -449,6 +474,68 @@ async def get_crypto_news(request: CryptoNewsRequest):
         
     except Exception as e:
         logger.error(f"Error fetching crypto news: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/signals/list")
+async def get_signals_list(limit: int = 50, offset: int = 0):
+    """
+    Get list of all generated signals with Solana proof data
+    
+    Args:
+        limit: Maximum number of signals to return
+        offset: Offset for pagination
+        
+    Returns:
+        List of signals with logo, time, signal type, accuracy, and Solana address
+    """
+    if hybrid_db is None:
+        raise HTTPException(status_code=503, detail="Database not initialized")
+    
+    try:
+        cur = hybrid_db.conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute(
+            """
+            SELECT 
+                id, symbol, signal, hybrid_score, confidence, 
+                sentiment_score, technical_score, volatility_index,
+                reason, proof_hash, tx_signature, timestamp, created_at
+            FROM hybrid_signals
+            ORDER BY timestamp DESC
+            LIMIT %s OFFSET %s
+            """,
+            (limit, offset)
+        )
+        rows = cur.fetchall()
+        cur.close()
+        
+        signals = []
+        for row in rows:
+            signals.append({
+                "id": row['id'],
+                "symbol": row['symbol'],
+                "signal": row['signal'],
+                "hybrid_score": float(row['hybrid_score']) if row['hybrid_score'] else 0.0,
+                "confidence": float(row['confidence']) if row['confidence'] else 0.0,
+                "sentiment_score": float(row['sentiment_score']) if row['sentiment_score'] else None,
+                "technical_score": float(row['technical_score']) if row['technical_score'] else None,
+                "volatility_index": float(row['volatility_index']) if row['volatility_index'] else None,
+                "reason": row['reason'],
+                "proof_hash": row['proof_hash'],
+                "tx_signature": row['tx_signature'],
+                "timestamp": row['timestamp'].isoformat() if row['timestamp'] else None,
+                "created_at": row['created_at'].isoformat() if row['created_at'] else None
+            })
+        
+        return {
+            "success": True,
+            "signals": signals,
+            "count": len(signals),
+            "limit": limit,
+            "offset": offset
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching signals list: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/crypto/market")
