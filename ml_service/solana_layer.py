@@ -17,16 +17,21 @@ import json
 import os
 from typing import Dict
 
-from solana.rpc.api import Client
-from solana.transaction import Transaction
-from solana.system_program import TransferParams, transfer
-from solana.keypair import Keypair
-from solana.rpc.types import TxOpts
+try:
+    from solana.rpc.api import Client
+    from solana.transaction import Transaction
+    from solana.system_program import TransferParams, transfer
+    from solana.keypair import Keypair
+    from solana.rpc.types import TxOpts
+    SOLANA_AVAILABLE = True
+except ImportError:
+    Client = Transaction = TransferParams = transfer = Keypair = TxOpts = None
+    SOLANA_AVAILABLE = False
 
 SOLANA_RPC_URL = os.getenv("SOLANA_RPC_URL", "https://api.testnet.solana.com")
 WALLET_FILE = os.getenv("SOLANA_WALLET_FILE", "solana_wallet.json")
 
-client = Client(SOLANA_RPC_URL)
+client = Client(SOLANA_RPC_URL) if SOLANA_AVAILABLE else None
 
 
 def init_wallet() -> Keypair:
@@ -56,6 +61,9 @@ def send_proof(signal_data: Dict) -> Dict[str, str]:
     returned alongside the transaction signature so consumers can verify
     the signal payload off-chain against the on-chain timestamp/signature.
     """
+    if not SOLANA_AVAILABLE:
+        raise RuntimeError("Solana SDK not installed")
+
     kp = init_wallet()
     proof = hash_signal(signal_data)
 
@@ -72,7 +80,9 @@ def send_proof(signal_data: Dict) -> Dict[str, str]:
     )
 
     # Fetch a recent blockhash
-    latest = client.get_latest_blockhash()
+    latest = client.get_latest_blockhash() if client else None
+    if not latest:
+        raise RuntimeError("Solana client unavailable")
     blockhash = latest["result"]["value"]["blockhash"]
     tx.recent_blockhash = blockhash
     tx.sign(kp)

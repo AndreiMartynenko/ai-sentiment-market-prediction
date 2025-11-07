@@ -15,6 +15,7 @@ from ml_service.sentiment import get_analyzer
 from ml_service.indicators import get_indicators
 from ml_service.hybrid_engine import get_engine
 from ml_service.solana_layer import send_proof
+from ml_service.news import get_crypto_news_manager
 
 # Setup logging
 logging.basicConfig(
@@ -23,6 +24,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Global managers
+news_manager = None
 # Initialize FastAPI app
 app = FastAPI(
     title="AI Sentiment Market Prediction - ML Service (No DB)",
@@ -43,13 +46,15 @@ app.add_middleware(
 try:
     analyzer = get_analyzer()
     indicators = get_indicators()
-    engine = get_engine(sentiment_weight=0.5, technical_weight=0.3, volatility_weight=0.2)
+    engine = get_engine(sentiment_weight=0.5, technical_weight=0.3)
+    news_manager = get_crypto_news_manager(analyzer)
     logger.info("All ML components initialized successfully (No database mode)")
 except Exception as e:
     logger.error(f"Error initializing ML components: {e}")
     analyzer = None
     indicators = None
     engine = None
+    news_manager = None
 
 # Pydantic models
 class SentimentRequest(BaseModel):
@@ -95,8 +100,34 @@ class HealthResponse(BaseModel):
     timestamp: str
     models_loaded: bool
 
+class NewsItem(BaseModel):
+    title: str
+    url: Optional[str]
+    published_at: Optional[str]
+    source: Optional[str]
+    domain: Optional[str]
+    sentiment_label: str
+    sentiment_score: float
+    sentiment_confidence: float
+
+class SymbolNews(BaseModel):
+    symbol: str
+    items: List[NewsItem]
+
+class NewsResponse(BaseModel):
+    success: bool
+    symbols: List[str]
+    data: List[SymbolNews]
+    source: str
+    last_updated: str
+
 # In-memory signal storage (optional, for listing)
 signals_cache = []
+
+DEFAULT_NEWS_SYMBOLS = [
+    "BTC", "ETH", "SOL", "BNB", "ADA", "XRP", "DOGE", "AVAX", "DOT", "MATIC",
+    "TON", "FET", "RNDR", "NEAR", "UNI", "AAVE", "COMP", "ARB", "OP", "USDT", "USDC"
+]
 
 # Root endpoint
 @app.get("/")
@@ -111,7 +142,8 @@ async def root():
             "sentiment": "/sentiment",
             "technical": "/technical",
             "hybrid": "/hybrid",
-            "signals_list": "/signals/list"
+            "signals_list": "/signals/list",
+            "news": "/news/crypto"
         }
     }
 
@@ -170,6 +202,58 @@ async def calculate_technical(request: TechnicalRequest):
     except Exception as e:
         logger.error(f"Error calculating technical indicators: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# News endpoint
+@app.get("/news/crypto", response_model=NewsResponse)
+async def get_crypto_news(symbols: Optional[str] = None, limit: int = 10):
+    """Fetch crypto news with sentiment analysis for specified symbols."""
+    if news_manager is None:
+        raise HTTPException(status_code=503, detail="News service not initialized")
+
+    try:
+        if symbols:
+            symbol_list = [sym.strip().upper() for sym in symbols.split(',') if sym.strip()]
+        else:
+            symbol_list = DEFAULT_NEWS_SYMBOLS
+
+        if not symbol_list:
+            raise HTTPException(status_code=400, detail="No symbols provided")
+
+        limit = max(1, min(limit, 20))
+        raw_news = news_manager.fetch_news_for_symbols(symbol_list, limit)
+
+        news_payload: List[SymbolNews] = []
+        for symbol in symbol_list:
+            items_payload: List[NewsItem] = []
+            for item in raw_news.get(symbol, []):
+                sentiment = item.get("sentiment", {}) or {}
+                items_payload.append(
+                    NewsItem(
+                        title=item.get("title", ""),
+                        url=item.get("url"),
+                        published_at=item.get("published_at"),
+                        source=item.get("source"),
+                        domain=item.get("domain"),
+                        sentiment_label=sentiment.get("label", "neutral"),
+                        sentiment_score=float(sentiment.get("sentiment_score", 0.0)),
+                        sentiment_confidence=float(sentiment.get("confidence", 0.0)),
+                    )
+                )
+            news_payload.append(SymbolNews(symbol=symbol, items=items_payload))
+
+        return NewsResponse(
+            success=True,
+            symbols=symbol_list,
+            data=news_payload,
+            source="CryptoPanic",
+            last_updated=datetime.now().isoformat()
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Error fetching news: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
 
 # Hybrid signal generation endpoint (stores in memory, publishes to Solana)
 @app.post("/hybrid", response_model=HybridResponse)
