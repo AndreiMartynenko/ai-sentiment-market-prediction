@@ -62,7 +62,11 @@ def send_proof(signal_data: Dict) -> Dict[str, str]:
     the signal payload off-chain against the on-chain timestamp/signature.
     """
     if not SOLANA_AVAILABLE:
-        raise RuntimeError("Solana SDK not installed")
+        return {
+            "proof_hash": hash_signal(signal_data),
+            "tx_signature": None,
+            "message": "Solana publishing disabled"
+        }
 
     kp = init_wallet()
     proof = hash_signal(signal_data)

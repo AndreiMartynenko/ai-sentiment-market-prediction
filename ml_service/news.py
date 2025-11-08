@@ -7,6 +7,7 @@ import logging
 import os
 import time
 from typing import Dict, List, Optional
+from urllib.parse import urlparse
 
 import requests
 
@@ -15,6 +16,7 @@ from ml_service.sentiment import FinBERTAnalyzer
 
 # Configure logging
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 class CryptoNewsManager:
@@ -36,7 +38,7 @@ class CryptoNewsManager:
         self.api_key = api_key or os.getenv("CRYPTOPANIC_API_KEY")
         self.analyzer = analyzer
         self.cache_ttl = cache_ttl
-        self.base_url = "https://cryptopanic.com/api/v1/posts/"
+        self.base_url = "https://cryptopanic.com/api/developer/v2/posts/"
         self._cache: Dict[str, Dict] = {}
 
         if not self.api_key:
@@ -80,16 +82,23 @@ class CryptoNewsManager:
         params = {
             "auth_token": self.api_key,
             "currencies": symbol,
-            "kinds": "news",  # focus on news (not blog)
-            "filter": "rising",  # prioritized content
-            "public": "true",
+            "kind": "news",
+            "limit": limit,
         }
 
         try:
             response = requests.get(self.base_url, params=params, timeout=10)
+            logger.debug(f"CryptoPanic request params: {params}")
+            logger.debug(f"CryptoPanic response status: {response.status_code}")
+            logger.debug(f"CryptoPanic raw response: {response.text[:500]}")
             response.raise_for_status()
             data = response.json()
-            results = data.get("results", [])[:limit]
+            results = data.get("results") or data.get("data") or []
+            if isinstance(results, dict) and "results" in results:
+                results = results["results"]
+            if not isinstance(results, list):
+                results = []
+            results = results[:limit]
 
             enriched_items: List[Dict] = []
             for item in results:
@@ -106,13 +115,37 @@ class CryptoNewsManager:
                     except Exception as analyze_error:
                         logger.warning(f"Sentiment analysis failed for '{title}': {analyze_error}")
 
+                metadata = item.get("metadata", {}) or {}
+                source_value = item.get("source")
+                if isinstance(source_value, dict):
+                    source_name = source_value.get("title") or source_value.get("name")
+                else:
+                    source_name = source_value
+                if not source_name:
+                    source_name = metadata.get("source") or metadata.get("source_title") or "Unknown"
+
+                published_at = item.get("published_at") or metadata.get("published_at") or metadata.get("created_at")
+                url = (
+                    item.get("original_url")
+                    or metadata.get("original_url")
+                    or metadata.get("url")
+                    or item.get("url")
+                    or item.get("link")
+                )
+                domain = item.get("domain") or metadata.get("domain")
+                if (not domain) and url:
+                    try:
+                        domain = urlparse(url).netloc
+                    except Exception:
+                        domain = None
+
                 enriched_items.append(
                     {
                         "title": title,
-                        "url": item.get("url"),
-                        "published_at": item.get("published_at"),
-                        "source": item.get("source", {}).get("title", "Unknown"),
-                        "domain": item.get("domain"),
+                        "url": url,
+                        "published_at": published_at,
+                        "source": source_name,
+                        "domain": domain,
                         "sentiment": sentiment,
                         "sentiment_label": sentiment.get("label", "neutral"),
                         "sentiment_score": float(sentiment.get("sentiment_score", 0.0)),
