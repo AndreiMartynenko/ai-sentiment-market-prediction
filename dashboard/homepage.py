@@ -95,107 +95,202 @@ st.markdown(
     }
     /* Header */
     .header-modern {
-        background: linear-gradient(135deg, rgba(13, 17, 23, 0.95), rgba(30, 41, 59, 0.92));
-        padding: 1.5rem 3rem;
-        margin: -2rem -1rem 2rem -1rem;
-        border-radius: 0 0 32px 32px;
-        border-bottom: 1px solid rgba(59, 130, 246, 0.25);
-        box-shadow: 0 40px 80px rgba(13, 17, 23, 0.65);
         position: relative;
+        margin: -2rem -1rem 2.5rem -1rem;
+        padding: 2.4rem 3rem;
+        border-radius: 32px;
         overflow: hidden;
+        background: radial-gradient(circle at 15% -20%, rgba(56, 189, 248, 0.35), transparent 55%),
+                    radial-gradient(circle at 85% 0%, rgba(236, 72, 153, 0.32), transparent 50%),
+                    linear-gradient(135deg, rgba(10, 12, 29, 0.95), rgba(15, 23, 42, 0.92) 55%, rgba(17, 24, 39, 0.88));
+        border: 1px solid rgba(59, 130, 246, 0.35);
+        box-shadow: 0 45px 90px rgba(4, 7, 15, 0.7);
     }
+
     .header-modern::before {
         content: '';
         position: absolute;
         inset: 0;
-        background: radial-gradient(circle at top right, rgba(59, 130, 246, 0.35), transparent 55%);
-        opacity: 0.65;
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(99, 102, 241, 0.05));
+        mix-blend-mode: screen;
+        opacity: 0.6;
     }
-    .header-content {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
+
+    .header-orb {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(80px);
+        opacity: 0.55;
+    }
+
+    .header-orb.orb-left {
+        width: 320px;
+        height: 320px;
+        top: -140px;
+        left: -110px;
+        background: radial-gradient(circle, rgba(34, 211, 238, 0.75), transparent 60%);
+    }
+
+    .header-orb.orb-right {
+        width: 280px;
+        height: 280px;
+        top: -160px;
+        right: -90px;
+        background: radial-gradient(circle, rgba(236, 72, 153, 0.65), transparent 60%);
+    }
+
+    .header-top {
         position: relative;
         z-index: 2;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 2rem;
     }
-    .logo-section {
+
+    .brand-block {
         display: flex;
         gap: 1rem;
         align-items: center;
     }
-    .logo-icon {
-        font-size: 2.6rem;
-        filter: drop-shadow(0 10px 25px rgba(59, 130, 246, 0.7));
-        animation: float 3.6s ease-in-out infinite;
+
+    .brand-icon {
+        font-size: 2.8rem;
+        filter: drop-shadow(0 15px 35px rgba(34, 211, 238, 0.55));
     }
-    .logo-text {
+
+    .brand-block h1 {
+        margin: 0;
         font-size: 2.2rem;
         font-weight: 800;
         letter-spacing: -0.5px;
         color: #f8fafc;
     }
-    .nav-modern {
-        display: flex;
-        gap: 2.5rem;
+
+    .brand-block p {
+        margin: 0.25rem 0 0 0;
+        color: #cbd5f5;
+        font-weight: 500;
     }
-    .nav-link-modern {
+
+    .header-nav {
+        display: flex;
+        justify-content: center;
+        gap: 1.6rem;
+        flex-wrap: wrap;
+    }
+
+    .header-nav a {
+        position: relative;
+        padding: 0.55rem 1.2rem;
+        border-radius: 999px;
         color: #cbd5f5;
         text-decoration: none;
         font-weight: 600;
-        padding: 0.6rem 1.4rem;
-        border-radius: 999px;
-        position: relative;
-        overflow: hidden;
-        transition: all 0.35s ease;
+        letter-spacing: 0.03em;
+        transition: color 0.3s ease, transform 0.3s ease;
     }
-    .nav-link-modern::after {
+
+    .header-nav a::after {
         content: '';
         position: absolute;
         inset: 0;
-        background: linear-gradient(135deg, rgba(59, 130, 246, 0.8), rgba(236, 72, 153, 0.8));
+        border-radius: inherit;
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.7), rgba(236, 72, 153, 0.7));
         opacity: 0;
-        transition: opacity 0.35s ease;
+        transition: opacity 0.3s ease;
+        filter: blur(0.5px);
     }
-    .nav-link-modern span {
+
+    .header-nav a span {
         position: relative;
-        z-index: 2;
+        z-index: 1;
     }
-    .nav-link-modern:hover::after {
-        opacity: 1;
-    }
-    .nav-link-modern:hover {
+
+    .header-nav a:hover {
         color: #0f172a;
         transform: translateY(-2px);
-        box-shadow: 0 12px 30px rgba(236, 72, 153, 0.35);
     }
-    .auth-modern {
+
+    .header-nav a:hover::after {
+        opacity: 1;
+    }
+
+    .action-block {
         display: flex;
-        gap: 1rem;
+        gap: 0.9rem;
+        align-items: center;
+        flex-wrap: wrap;
+        justify-content: flex-end;
     }
-    .btn-primary-modern {
-        padding: 0.75rem 1.9rem;
+
+    .action-button {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.7rem 1.6rem;
         border-radius: 14px;
-        border: 1px solid rgba(148, 163, 184, 0.6);
-        color: #e0f2fe;
         font-weight: 600;
         letter-spacing: 0.02em;
-        background: rgba(8, 145, 178, 0.25);
-        backdrop-filter: blur(12px);
-        box-shadow: 0 25px 40px rgba(6, 182, 212, 0.25);
-        transition: all 0.3s ease;
         text-decoration: none;
+        transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
     }
-    .btn-primary-modern:hover {
-        background: linear-gradient(135deg, #0ea5e9, #22d3ee);
+
+    .action-button.primary {
+        background: linear-gradient(135deg, #22d3ee, #6366f1);
         color: #020617;
-        border-color: transparent;
+        box-shadow: 0 18px 40px rgba(79, 70, 229, 0.45);
+    }
+
+    .action-button.ghost {
+        border: 1px solid rgba(148, 163, 184, 0.5);
+        color: #e0f2fe;
+        background: rgba(15, 23, 42, 0.4);
+    }
+
+    .action-button:hover {
         transform: translateY(-2px);
+        box-shadow: 0 24px 45px rgba(59, 130, 246, 0.35);
     }
-    @keyframes float {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-8px); }
+
+    .header-bottom {
+        position: relative;
+        z-index: 2;
+        margin-top: 2.4rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1.2rem;
+        flex-wrap: wrap;
     }
-    /* Hero */
+
+    .tagline {
+        font-size: 1.1rem;
+        color: #dbeafe;
+        max-width: 620px;
+        line-height: 1.55;
+    }
+
+    .metric-row {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .metric-chip {
+        padding: 0.45rem 1.1rem;
+        border-radius: 999px;
+        border: 1px solid rgba(59, 130, 246, 0.4);
+        background: rgba(15, 23, 42, 0.6);
+        color: #cbd5f5;
+        font-weight: 600;
+        font-size: 0.8rem;
+        letter-spacing: 0.04em;
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.45);
+    }
+
     .hero-modern {
         background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 64, 175, 0.45));
         border: 1px solid rgba(59, 130, 246, 0.35);
@@ -655,20 +750,35 @@ def render_modern_header():
     st.markdown(
         """
         <div class="header-modern">
-            <div class="header-content">
-                <div class="logo-section">
-                    <span class="logo-icon">🔐</span>
-                    <h1 class="logo-text">ProofOfSignal</h1>
+            <div class="header-orb orb-left"></div>
+            <div class="header-orb orb-right"></div>
+            <div class="header-top">
+                <div class="brand-block">
+                    <div class="brand-icon">🔐</div>
+                    <div>
+                        <h1>ProofOfSignal</h1>
+                        <p>On-chain verified market intelligence for crypto-native teams.</p>
+                    </div>
                 </div>
-                <nav class="nav-modern">
-                    <a href="#" class="nav-link-modern"><span>Home</span></a>
-                    <a href="#about" class="nav-link-modern"><span>About</span></a>
-                    <a href="#prices" class="nav-link-modern"><span>Prices</span></a>
-                    <a href="#contact" class="nav-link-modern"><span>Contact</span></a>
+                <nav class="header-nav">
+                    <a href="#overview"><span>Overview</span></a>
+                    <a href="#signals"><span>Signals</span></a>
+                    <a href="#news"><span>News</span></a>
+                    <a href="#docs"><span>Docs</span></a>
                 </nav>
-                <div class="auth-modern">
-                    <a href="#login" class="btn-primary-modern">Log In</a>
-                    <a href="#signup" class="btn-primary-modern">Sign Up</a>
+                <div class="action-block">
+                    <a class="action-button ghost" href="#docs">Docs</a>
+                    <a class="action-button primary" href="#dashboard">Launch Console</a>
+                </div>
+            </div>
+            <div class="header-bottom">
+                <div class="tagline">
+                    Hybrid AI, sentiment analytics, and on-chain proofs powering next-generation trading experiences.
+                </div>
+                <div class="metric-row">
+                    <div class="metric-chip">⚡ Real-time Signals</div>
+                    <div class="metric-chip">🧠 FinBERT Sentiment</div>
+                    <div class="metric-chip">⛓️ Proof-of-Signal</div>
                 </div>
             </div>
         </div>
