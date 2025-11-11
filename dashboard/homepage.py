@@ -75,7 +75,9 @@ st.markdown(
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
     html, body {
-        background: radial-gradient(circle at top left, #1e293b 0%, #0f172a 45%, #020617 100%) !important;
+        background: radial-gradient(circle at 18% -12%, rgba(34, 211, 238, 0.35), transparent 58%),
+                    radial-gradient(circle at 85% -10%, rgba(236, 72, 153, 0.3), transparent 60%),
+                    linear-gradient(135deg, #040819 0%, #020614 35%, #01040e 65%, #000208 100%) !important;
         color: #e2e8f0 !important;
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
     }
@@ -83,8 +85,13 @@ st.markdown(
         background: transparent;
     }
     .main .block-container {
-        padding-top: 1.5rem;
+        padding: 2.4rem 2.6rem;
         max-width: 1400px;
+        background: rgba(8, 12, 26, 0.55);
+        border: 1px solid rgba(59, 130, 246, 0.14);
+        border-radius: 34px;
+        box-shadow: 0 60px 120px rgba(1, 4, 12, 0.75);
+        backdrop-filter: blur(20px);
     }
     .neon-glass {
         backdrop-filter: blur(16px);
@@ -816,8 +823,8 @@ def main():
     signal_result: Optional[Dict] = None
     # Fetch news (cached)
     news_response = fetch_news_data(NEWS_DEFAULT_SYMBOLS, limit=10)
-    # Layout: Sidebar / News / Charts
-    col_sidebar, col_news, col_chart = st.columns([0.85, 1.65, 1.25], gap="large")
+    # Layout: Sidebar / TradingView / News
+    col_sidebar, col_chart, col_news = st.columns([0.85, 2.2, 1.4], gap="large")
     with col_sidebar:
         st.markdown("### 🎯 Controls")
         symbol = st.text_input(
@@ -846,8 +853,6 @@ def main():
         if signal_result:
             st.session_state["selected_symbol"] = symbol.upper()
             selected_symbol = symbol.upper()
-    with col_news:
-        render_news_section(news_response)
     with col_chart:
         st.markdown("### 📈 TradingView")
         render_tradingview_chart(selected_symbol)
@@ -857,5 +862,7 @@ def main():
             render_signal_card(signal_result, selected_symbol)
         else:
             st.info("Generate a signal to view AI insights alongside the chart.")
+    with col_news:
+        render_news_section(news_response)
 if __name__ == "__main__":
     main()
