@@ -73,7 +73,7 @@ func main() {
 				Timeframe string   `json:"timeframe,omitempty"`
 				Lookback  int      `json:"lookback,omitempty"`
 			}
-			// If error
+			// If error in binding JSON
 			if err := c.ShouldBindJSON(&request); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{
 					"error": "Invalid request format",
