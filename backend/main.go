@@ -106,7 +106,7 @@ func main() {
 	port := "8080"
 	log.Printf("🚀 Server starting on port %s", port)
 	log.Printf("📊 AI Sentiment Market Prediction API v1.0.0")
-	// log.Printf("🔗 Health check: http://localhost:%s/api/v1/health", port)
+	log.Printf("🔗 Health check: http://localhost:%s/api/v1/health", port)
 
 	if err := router.Run(":" + port); err != nil {
 		log.Fatal("Failed to start server:", err)
