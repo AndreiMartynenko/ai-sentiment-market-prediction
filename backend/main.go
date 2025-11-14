@@ -102,7 +102,7 @@ func main() {
 		})
 	}
 
-	// Start server
+	// Start server on port 8080
 	port := "8080"
 	log.Printf("🚀 Server starting on port %s", port)
 	log.Printf("📊 AI Sentiment Market Prediction API v1.0.0")
