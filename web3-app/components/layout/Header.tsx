@@ -39,13 +39,19 @@ export function Header() {
           ))}
         </nav>
 
-        {/* CTAs */}
+        {/* Auth CTAs */}
         <div className="hidden items-center gap-3 md:flex">
           <Link
-            href="/dashboard"
-            className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-xs font-semibold tracking-wide text-emerald-300 hover:border-emerald-400/60 hover:bg-emerald-500/20 transition-colors"
+            href="/auth/login"
+            className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-2 text-xs font-semibold tracking-wide text-gray-300 hover:border-gray-700 hover:bg-gray-900 transition-colors"
           >
-            Launch App
+            Log in
+          </Link>
+          <Link
+            href="/auth/signup"
+            className="rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-400 px-4 py-2 text-xs font-semibold tracking-wide text-gray-950 shadow-lg shadow-emerald-500/30 hover:from-emerald-400 hover:to-emerald-300 transition-colors"
+          >
+            Sign up
           </Link>
         </div>
 
@@ -72,13 +78,22 @@ export function Header() {
                 {item.name}
               </Link>
             ))}
-            <Link
-              href="/dashboard"
-              className="mt-2 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-400 px-3 py-2 text-center text-xs font-semibold tracking-wide text-gray-950"
-              onClick={() => setIsMenuOpen(false)}
-            >
-              Launch App
-            </Link>
+            <div className="mt-2 flex gap-2">
+              <Link
+                href="/auth/login"
+                className="flex-1 rounded-lg border border-gray-800 px-3 py-2 text-center text-xs font-semibold tracking-wide text-gray-300 hover:border-gray-700 hover:bg-gray-900"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Log in
+              </Link>
+              <Link
+                href="/auth/signup"
+                className="flex-1 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-400 px-3 py-2 text-center text-xs font-semibold tracking-wide text-gray-950"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Sign up
+              </Link>
+            </div>
           </div>
         </div>
       )}

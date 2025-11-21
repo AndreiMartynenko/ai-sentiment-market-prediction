@@ -59,8 +59,8 @@ export default function HomePage() {
             </h1>
 
             <p className="max-w-xl text-sm leading-relaxed text-gray-400 sm:text-base">
-              ProofOfSignal анализирует order books, on‑chain‑данные и соц‑сигналы в реальном времени,
-              чтобы выдавать прозрачные, воспроизводимые торговые сигналы для трейдеров и протоколов.
+              ProofOfSignal analyzes order books, on‑chain data, and social signals in real time to
+              deliver transparent, reproducible trading signals for both traders and protocols.
             </p>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -183,17 +183,6 @@ export default function HomePage() {
               <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">Market Snapshot</h2>
               <p className="text-xs text-gray-500">High‑level view of top markets tracked by ProofOfSignal.</p>
             </div>
-            <select
-              value={selectedCoin}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedCoin(e.target.value)}
-              className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-1.5 text-xs text-gray-200 focus:border-emerald-400 focus:outline-none"
-            >
-              {marketData.map((coin) => (
-                <option key={coin.coin} value={coin.coin}>
-                  {coin.coin} — {coin.name}
-                </option>
-              ))}
-            </select>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -240,8 +229,8 @@ export default function HomePage() {
             <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">How It Works</h2>
             <p className="mt-2 text-lg font-medium text-gray-100">From raw data streams to actionable signals.</p>
             <p className="mt-2 text-sm text-gray-500">
-              ProofOfSignal соединяет рыночные данные, on‑chain‑активность и NLP‑модели по соц‑медиа, используя
-              пайплайн, оптимизированный под низкую задержку.
+              ProofOfSignal combines market data, on‑chain activity, and social‑media NLP models in a
+              latency‑optimized pipeline to turn noisy streams into clean, tradable signals.
             </p>
           </div>
 
@@ -252,8 +241,8 @@ export default function HomePage() {
               </div>
               <h3 className="mb-2 text-sm font-semibold text-gray-100">Signal Engine</h3>
               <p className="text-xs text-gray-500">
-                Ensemble‑модели анализируют orderflow, funding, volatility и поток новостей, выдавая сигнал BUY/SELL/NEUTRAL
-                для каждой пары.
+                Ensemble models analyze order flow, funding, volatility, and news flow, producing
+                BUY/SELL/NEUTRAL signals for each market in real time.
               </p>
             </div>
             <div className="rounded-2xl border border-gray-900 bg-gray-950/80 p-5">
@@ -262,7 +251,8 @@ export default function HomePage() {
               </div>
               <h3 className="mb-2 text-sm font-semibold text-gray-100">Risk Layer</h3>
               <p className="text-xs text-gray-500">
-                Управление риском по каждому сигналу: размер позиции, допустимая просадка и динамический стоп‑лосс.
+                Per‑signal risk controls: position sizing, max drawdown limits, and dynamic stop‑loss logic
+                tailored to each strategy.
               </p>
             </div>
             <div className="rounded-2xl border border-gray-900 bg-gray-950/80 p-5">
@@ -271,7 +261,8 @@ export default function HomePage() {
               </div>
               <h3 className="mb-2 text-sm font-semibold text-gray-100">API for Builders</h3>
               <p className="text-xs text-gray-500">
-                Простое API для подключения к боту, dApp или quant‑инфраструктуре: JSON/REST и WebSocket‑фиды.
+                A simple API to plug into your bot, dApp, or quant stack with JSON/REST endpoints and
+                WebSocket feeds ready for production use.
               </p>
             </div>
           </div>
@@ -288,8 +279,8 @@ export default function HomePage() {
                 Build on top of ProofOfSignal: integrate AI‑signals into your trading stack.
               </p>
               <p className="text-sm text-gray-500">
-                Подключайся через стандартное HTTP API или WebSocket‑стрим, документированный в формате OpenAPI.
-                Примеры на Python, TypeScript и Golang.
+                Connect via a standard HTTP API or WebSocket stream documented with OpenAPI, with
+                ready‑to‑use examples in Python, TypeScript, and Golang.
               </p>
               <div className="flex flex-wrap gap-3 text-[11px] text-gray-400">
                 <span className="rounded-full border border-gray-800 px-3 py-1">REST &amp; WebSocket API</span>
