@@ -96,3 +96,5 @@ data/processed/*
 
 node_modules/
 web3-app/node_modules/
+
+web3-app/.next

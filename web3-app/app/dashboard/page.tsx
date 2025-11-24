@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useEffect, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 const mockSignals = [
   {
@@ -295,6 +295,7 @@ export default function TradingDashboardPage(): React.JSX.Element {
   const [selectedSymbol, setSelectedSymbol] = useState('BTCUSDT')
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const [news, setNews] = useState<NewsItem[]>([])
   const [newsLoading, setNewsLoading] = useState(false)
@@ -330,6 +331,16 @@ export default function TradingDashboardPage(): React.JSX.Element {
       return next.slice(0, 5)
     })
   }
+
+  // 0) Initialize symbol from ?symbol= query if provided
+  useEffect(() => {
+    const fromQuery = searchParams.get('symbol')
+    if (!fromQuery) return
+
+    const upper = fromQuery.toUpperCase()
+    setSelectedSymbol(upper)
+    addRecentSymbol(upper)
+  }, [searchParams])
 
   // 1) Auth check
   useEffect(() => {
@@ -695,6 +706,9 @@ export default function TradingDashboardPage(): React.JSX.Element {
                   <h2 className="text-sm font-semibold text-gray-100">
                     Scalping Algo Signals
                   </h2>
+                  <p className="mt-0.5 text-[11px] text-gray-500">
+                    Short-term intraday view using EMA20/50 and RSI14 on 5m, 15m and 1h timeframes.
+                  </p>
                 </div>
                 {indicatorsUpdatedAt && (
                   <span className="text-[10px] text-gray-500">
@@ -759,6 +773,9 @@ export default function TradingDashboardPage(): React.JSX.Element {
                   <h2 className="text-sm font-semibold text-gray-100">
                     Swing / Daytrading Algo Signals
                   </h2>
+                  <p className="mt-0.5 text-[11px] text-gray-500">
+                    Medium-term trend view on 4h and 1D using EMA20/50, RSI14 and our AI signal engine.
+                  </p>
                 </div>
                 {indicatorsUpdatedAt && (
                   <span className="text-[10px] text-gray-500">

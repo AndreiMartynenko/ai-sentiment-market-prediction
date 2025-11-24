@@ -1,7 +1,7 @@
 'use client'
 
 import type React from 'react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   TrendingUp,
@@ -14,13 +14,59 @@ import {
 
 export default function HomePage() {
   const [selectedCoin, setSelectedCoin] = useState('BTC')
+  const [marketData, setMarketData] = useState<
+    | {
+        coin: string
+        name: string
+        price: number
+        changePercent: number
+        volumeQuote: number
+      }[]
+    | null
+  >(null)
+  const [marketLoading, setMarketLoading] = useState(false)
+  const [marketError, setMarketError] = useState<string | null>(null)
 
-  const marketData = [
-    { coin: 'BTC', name: 'Bitcoin', price: '$43,256', change: '+2.4%', positive: true, volume: '$28.5B' },
-    { coin: 'ETH', name: 'Ethereum', price: '$2,245', change: '+1.8%', positive: true, volume: '$12.3B' },
-    { coin: 'SOL', name: 'Solana', price: '$98.45', change: '-0.8%', positive: false, volume: '$2.1B' },
-    { coin: 'BNB', name: 'Binance Coin', price: '$312.67', change: '+1.2%', positive: true, volume: '$1.8B' },
-  ]
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadMarkets() {
+      try {
+        setMarketLoading(true)
+        setMarketError(null)
+
+        const res = await fetch('/api/markets', { cache: 'no-store' })
+        if (!res.ok) {
+          throw new Error('Failed to load markets')
+        }
+
+        const data = await res.json()
+        if (cancelled) return
+
+        const mapped = (data.markets || []).map((m: any) => ({
+          coin: m.coin as string,
+          name: m.name as string,
+          price: Number(m.price),
+          changePercent: Number(m.changePercent),
+          volumeQuote: Number(m.volumeQuote),
+        }))
+
+        setMarketData(mapped)
+      } catch (err) {
+        if (!cancelled) {
+          setMarketError('Failed to load market snapshot.')
+        }
+      } finally {
+        if (!cancelled) setMarketLoading(false)
+      }
+    }
+
+    loadMarkets()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const latestSignals = [
     { coin: 'BTC', signal: 'BUY', confidence: 0.92, time: '2 min ago' },
@@ -185,8 +231,27 @@ export default function HomePage() {
             </div>
           </div>
 
+          {marketLoading && (
+            <div className="mb-3 text-xs text-gray-500">Loading market snapshot…</div>
+          )}
+
+          {marketError && !marketLoading && (
+            <div className="mb-3 text-xs text-red-400">{marketError}</div>
+          )}
+
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {marketData.map((item) => (
+            {(marketData || []).map((item) => {
+              const positive = item.changePercent >= 0
+              const priceFormatted =
+                item.price >= 1000
+                  ? `$${item.price.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                  : `$${item.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+
+              const changeFormatted = `${positive ? '+' : ''}${item.changePercent.toFixed(2)}%`
+              const volumeBillions = item.volumeQuote / 1_000_000_000
+              const volumeFormatted = `$${volumeBillions.toFixed(1)}B`
+
+              return (
               <div
                 key={item.coin}
                 className="rounded-2xl border border-gray-900 bg-gray-950/80 p-4 transition hover:border-emerald-500/40 hover:bg-gray-900/80"
@@ -196,7 +261,7 @@ export default function HomePage() {
                     <div className="text-xs font-semibold text-gray-200">{item.coin}</div>
                     <div className="text-[11px] text-gray-500">{item.name}</div>
                   </div>
-                  {item.positive ? (
+                  {positive ? (
                     <ArrowUpRight className="h-4 w-4 text-emerald-400" />
                   ) : (
                     <ArrowDownRight className="h-4 w-4 text-red-400" />
@@ -204,20 +269,20 @@ export default function HomePage() {
                 </div>
                 <div className="flex items-end justify-between">
                   <div>
-                    <div className="text-sm font-semibold text-gray-100">{item.price}</div>
+                    <div className="text-sm font-semibold text-gray-100">{priceFormatted}</div>
                     <div
-                      className={`text-[11px] font-medium ${item.positive ? 'text-emerald-300' : 'text-red-400'}`}
+                      className={`text-[11px] font-medium ${positive ? 'text-emerald-300' : 'text-red-400'}`}
                     >
-                      {item.change}
+                      {changeFormatted}
                     </div>
                   </div>
                   <div className="text-right text-[11px] text-gray-500">
                     <div>Vol 24h</div>
-                    <div className="text-gray-300">{item.volume}</div>
+                    <div className="text-gray-300">{volumeFormatted}</div>
                   </div>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         </div>
       </section>

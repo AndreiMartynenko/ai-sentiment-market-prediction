@@ -9,9 +9,9 @@ export function Header() {
 
   const navigation = [
     { name: "Overview", href: "/" },
-    { name: "Signals", href: "/signals" },
     { name: "Market", href: "/market" },
     { name: "Docs", href: "/docs" },
+    { name: "Contact Us", href: "/contact" },
   ]
 
   return (
