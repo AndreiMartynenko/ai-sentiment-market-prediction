@@ -49,9 +49,9 @@ type NewsItem = {
   source: string
   url: string
   publishedAt: string
-  sentimentLabel: string
-  sentimentScore: number
-  sentimentConfidence: number
+  sentimentLabel?: string
+  sentimentScore?: number
+  sentimentConfidence?: number
 }
 
 type IndicatorSummary = {
@@ -301,6 +301,7 @@ export default function TradingDashboardPage(): React.JSX.Element {
   const [newsLoading, setNewsLoading] = useState(false)
   const [newsError, setNewsError] = useState<string | null>(null)
   const [newsUpdatedAt, setNewsUpdatedAt] = useState<string | null>(null)
+  const [newsSentimentEnabled, setNewsSentimentEnabled] = useState<boolean>(true)
 
   const [indicators, setIndicators] = useState<IndicatorsData | null>(null)
   const [indicatorsLoading, setIndicatorsLoading] = useState(false)
@@ -309,9 +310,14 @@ export default function TradingDashboardPage(): React.JSX.Element {
 
   const [recentSymbols, setRecentSymbols] = useState<string[]>([])
 
+  const sentimentNews =
+    newsSentimentEnabled && news.length > 0
+      ? news.filter((n) => typeof n.sentimentScore === 'number' && !Number.isNaN(n.sentimentScore))
+      : []
+
   const sentimentAvg =
-    news.length > 0
-      ? news.reduce((sum, n) => sum + (n.sentimentScore ?? 0), 0) / news.length
+    sentimentNews.length > 0
+      ? sentimentNews.reduce((sum, n) => sum + (n.sentimentScore || 0), 0) / sentimentNews.length
       : 0
 
   const sentimentOverallLabel =
@@ -385,6 +391,7 @@ export default function TradingDashboardPage(): React.JSX.Element {
         }))
 
         setNews(items)
+        setNewsSentimentEnabled(data.sentimentEnabled !== false)
         setNewsUpdatedAt(new Date().toISOString())
       } catch (e) {
         console.error('loadNews error', e)
@@ -841,7 +848,7 @@ export default function TradingDashboardPage(): React.JSX.Element {
               )}
             </div>
 
-            {news.length > 0 && (
+            {newsSentimentEnabled && sentimentNews.length > 0 && (
               <span
                 className={
                   'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ' +
@@ -894,23 +901,28 @@ export default function TradingDashboardPage(): React.JSX.Element {
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between pt-1 border-t border-gray-900/80">
-                    <span
-                      className={
-                        'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ' +
-                        (item.sentimentLabel === 'positive'
-                          ? 'bg-emerald-500/10 text-emerald-300'
-                          : item.sentimentLabel === 'negative'
-                          ? 'bg-red-500/10 text-red-300'
-                          : 'bg-gray-700/40 text-gray-300')
-                      }
-                    >
-                      {item.sentimentLabel ?? 'neutral'}{' '}
-                      {typeof item.sentimentScore === 'number'
-                        ? item.sentimentScore.toFixed(2)
-                        : ''}
-                    </span>
-                  </div>
+                  {newsSentimentEnabled && item.sentimentLabel && (
+                    <div className="flex items-center justify-between pt-1 border-t border-gray-900/80">
+                      <span
+                        className={
+                          'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ' +
+                          (item.sentimentLabel === 'positive'
+                            ? 'bg-emerald-500/10 text-emerald-300'
+                            : item.sentimentLabel === 'negative'
+                            ? 'bg-red-500/10 text-red-300'
+                            : 'bg-gray-800/70 text-gray-300')
+                        }
+                      >
+                        <span className="mr-1 h-1.5 w-1.5 rounded-full bg-current" />
+                        <span className="capitalize">{item.sentimentLabel}</span>
+                        {typeof item.sentimentScore === 'number' && (
+                          <span className="ml-1 font-mono tabular-nums text-[10px]">
+                            {item.sentimentScore.toFixed(2)}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </article>
             ))}

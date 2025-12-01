@@ -3,6 +3,20 @@ import { NextResponse } from 'next/server'
 const NEWS_API_KEY = process.env.NEWS_API_KEY
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000'
 
+// Only compute detailed sentiment for a curated set of majors.
+const TOP_SENTIMENT_BASES = new Set([
+  'BTC',
+  'ETH',
+  'SOL',
+  'BNB',
+  'XRP',
+  'ADA',
+  'DOGE',
+  'TON',
+  'LINK',
+  'AVAX',
+])
+
 function symbolToKeyword(symbol: string): string {
   const base = symbol.replace(/(USDT|USD|USDC|BTC|ETH|EUR|PERP)$/i, '') || 'BTC'
 
@@ -26,7 +40,10 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url)
   const symbol = searchParams.get('symbol') || 'BTCUSDT'
+  const base = symbol.replace(/(USDT|USD|USDC|BTC|ETH|EUR|PERP)$/i, '') || 'BTC'
   const keyword = symbolToKeyword(symbol)
+
+  const shouldAnalyzeSentiment = TOP_SENTIMENT_BASES.has(base.toUpperCase())
 
   const url = new URL('https://newsapi.org/v2/everything')
   url.searchParams.set('q', keyword)
@@ -52,7 +69,7 @@ export async function GET(req: Request) {
 
   const data = await res.json()
 
-    const baseItems = (data.articles || []).map((a: any, idx: number) => ({
+  const baseItems = (data.articles || []).map((a: any, idx: number) => ({
     id: a.url || String(idx),
     title: a.title as string,
     description: (a.description as string) || '',
@@ -60,6 +77,14 @@ export async function GET(req: Request) {
     url: a.url as string,
     publishedAt: a.publishedAt as string,
   }))
+
+  // If symbol is outside the top majors, return plain news without sentiment.
+  if (!shouldAnalyzeSentiment) {
+    return NextResponse.json({
+      items: baseItems,
+      sentimentEnabled: false,
+    })
+  }
 
   // Call FinBERT ML service for each title (optionally title + description)
   const enrichedItems = await Promise.all(
@@ -69,8 +94,8 @@ export async function GET(req: Request) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            symbol: symbol,                      // from earlier in route
-            text: item.title || item.description // you can concatenate if you want
+            symbol: symbol,
+            text: item.title || item.description,
           }),
         })
 
@@ -99,5 +124,5 @@ export async function GET(req: Request) {
     }),
   )
 
-  return NextResponse.json({ items: enrichedItems })
+  return NextResponse.json({ items: enrichedItems, sentimentEnabled: true })
 }
