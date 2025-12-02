@@ -3,6 +3,9 @@ import { NextResponse } from 'next/server'
 const TWELVEDATA_API_KEY = process.env.TWELVEDATA_API_KEY
 const API_NINJAS_API_KEY = process.env.API_NINJAS_API_KEY
 
+// Session-scoped baseline prices for indices to compute recent percent change
+const ninjasIndexBaselines = new Map<string, number>()
+
 if (!TWELVEDATA_API_KEY) {
   console.warn('TWELVEDATA_API_KEY is not set. /api/global/overview will return an error.')
 }
@@ -85,8 +88,15 @@ async function fetchNinjasIndex(
   const price = Number(data.price)
   if (!Number.isFinite(price)) return null
 
-  // API Ninjas stockprice API does not provide percent change directly in docs; set 0 for now.
-  const changePercent = 0
+  // API Ninjas stockprice API does not provide 24h percent change.
+  // Compute a session-based change relative to the first price seen for this ticker
+  let changePercent = 0
+  const baseline = ninjasIndexBaselines.get(ticker)
+  if (baseline === undefined) {
+    ninjasIndexBaselines.set(ticker, price)
+  } else if (baseline > 0) {
+    changePercent = ((price - baseline) / baseline) * 100
+  }
 
   return {
     symbol: displaySymbol,
