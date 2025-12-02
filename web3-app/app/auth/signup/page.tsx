@@ -1,53 +1,45 @@
 "use client"
 
 import React, { useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { supabase } from "../../../lib/supabaseClient"
 
 export default function SignupPage(): React.JSX.Element {
   const [email, setEmail] = useState("")
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
   const router = useRouter()
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError(null)
+    setLoading(true)
 
     try {
-      const raw = typeof window !== "undefined" ? window.localStorage.getItem("pos_users") : null
-      const users = raw ? JSON.parse(raw) : []
+      const normalizedEmail = email.trim().toLowerCase()
 
-      const exists = users.some(
-        (u: { email: string; username: string }) =>
-          u.email.toLowerCase() === email.toLowerCase() ||
-          u.username.toLowerCase() === username.toLowerCase(),
-      )
-
-      if (exists) {
-        setError("User with this email or username already exists.")
-        return
-      }
-
-      const updatedUsers = [
-        ...users,
-        {
-          email,
-          username,
-          password,
+      const { error: signUpError } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password,
+        options: {
+          data: { username },
         },
-      ]
+      })
 
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("pos_users", JSON.stringify(updatedUsers))
-        window.localStorage.setItem("pos_current_user", username)
-        window.localStorage.setItem("pos_is_authenticated", "true")
+      if (signUpError) {
+        setError(signUpError.message || "Failed to sign up. Please try again.")
+        return
       }
 
       router.push("/dashboard")
     } catch (e) {
       console.error("signup error", e)
       setError("Something went wrong. Please try again.")
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -128,11 +120,19 @@ export default function SignupPage(): React.JSX.Element {
 
         <button
           type="submit"
-          className="mt-2 w-full rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-400 px-4 py-2 text-sm font-semibold text-gray-950 hover:from-emerald-400 hover:to-emerald-300"
+          disabled={loading}
+          className="mt-2 w-full rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-400 px-4 py-2 text-sm font-semibold text-gray-950 hover:from-emerald-400 hover:to-emerald-300 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          Sign up
+          {loading ? "Signing up..." : "Sign up"}
         </button>
       </form>
+
+      <p className="mt-4 text-center text-xs text-gray-500">
+        Have an account?{" "}
+        <Link href="/auth/login" className="font-semibold text-emerald-300 hover:text-emerald-200">
+          Sign in
+        </Link>
+      </p>
     </div>
   )
 }

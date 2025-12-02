@@ -19,14 +19,8 @@ export function Footer() {
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-8">
           <nav className="flex flex-wrap gap-x-6 gap-y-2 text-xs text-gray-400">
-            <Link href="/services" className="hover:text-emerald-300">
-              Services
-            </Link>
-            <Link href="/case-studies" className="hover:text-emerald-300">
-              Case Studies
-            </Link>
-            <Link href="/docs" className="hover:text-emerald-300">
-              Docs
+            <Link href="/api" className="hover:text-emerald-300">
+              API
             </Link>
             <Link href="/contact" className="hover:text-emerald-300">
               Contact

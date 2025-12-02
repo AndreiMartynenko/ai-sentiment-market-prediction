@@ -1,52 +1,48 @@
 "use client"
 
 import React, { useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { supabase } from "../../../lib/supabaseClient"
 
 export default function LoginPage(): React.JSX.Element {
-  const [identifier, setIdentifier] = useState("") // email or username
+  const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
   const router = useRouter()
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError(null)
+    setLoading(true)
 
     try {
-      const raw = typeof window !== "undefined" ? window.localStorage.getItem("pos_users") : null
-      const users: { email: string; username: string; password: string }[] = raw ? JSON.parse(raw) : []
+      const normalizedEmail = email.trim().toLowerCase()
 
-      const match = users.find(
-        (u) =>
-          (u.email.toLowerCase() === identifier.toLowerCase() ||
-            u.username.toLowerCase() === identifier.toLowerCase()) &&
-          u.password === password,
-      )
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      })
 
-      if (!match) {
-        setError("Invalid credentials. Check your email/username and password.")
+      if (signInError) {
+        setError(signInError.message || "Invalid credentials. Check your email and password.")
         return
-      }
-
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("pos_current_user", match.username)
-        window.localStorage.setItem("pos_is_authenticated", "true")
       }
 
       router.push("/dashboard")
     } catch (e) {
       console.error("login error", e)
       setError("Something went wrong. Please try again.")
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-4 py-10">
       <div className="mb-6 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight text-gray-50">
-          Log in
-        </h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-gray-50">Log in</h1>
         <p className="mt-2 text-sm text-gray-500">
           Use your email or username to access your dashboard.
         </p>
@@ -64,19 +60,19 @@ export default function LoginPage(): React.JSX.Element {
       >
         <div className="space-y-1">
           <label
-            htmlFor="identifier"
+            htmlFor="email"
             className="block text-xs font-medium text-gray-300"
           >
-            Email or username
+            Email
           </label>
           <input
-            id="identifier"
-            type="text"
-            value={identifier}
-            onChange={(e) => setIdentifier(e.target.value)}
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             required
             className="w-full rounded-lg border border-gray-800 bg-gray-950 px-3 py-2 text-sm text-gray-100 placeholder:text-gray-500 focus:border-emerald-400 focus:outline-none"
-            placeholder="you@example.com or trader42"
+            placeholder="you@example.com"
           />
         </div>
 
@@ -100,11 +96,19 @@ export default function LoginPage(): React.JSX.Element {
 
         <button
           type="submit"
-          className="mt-2 w-full rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-gray-950 hover:bg-emerald-400"
+          disabled={loading}
+          className="mt-2 w-full rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-gray-950 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          Log in
+          {loading ? "Logging in..." : "Log in"}
         </button>
       </form>
+
+      <p className="mt-4 text-center text-xs text-gray-500">
+        Don&apos;t have an account?{" "}
+        <Link href="/auth/signup" className="font-semibold text-emerald-300 hover:text-emerald-200">
+          Sign up
+        </Link>
+      </p>
     </div>
   )
 }

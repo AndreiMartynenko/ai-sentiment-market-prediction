@@ -1,16 +1,66 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
-import { TrendingUp, Menu, X } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { TrendingUp, Menu, X, User } from "lucide-react"
+import { supabase } from "../../lib/supabaseClient"
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [currentUser, setCurrentUser] = useState<any | null>(null)
+  const [userLoading, setUserLoading] = useState(true)
+  const router = useRouter()
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadUser() {
+      try {
+        const { data, error } = await supabase.auth.getUser()
+        if (!isMounted) return
+        if (!error && data?.user) {
+          setCurrentUser(data.user)
+        } else {
+          setCurrentUser(null)
+        }
+      } catch {
+        if (isMounted) setCurrentUser(null)
+      } finally {
+        if (isMounted) setUserLoading(false)
+      }
+    }
+
+    loadUser()
+
+     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+       if (!isMounted) return
+       setCurrentUser(session?.user ?? null)
+       setUserLoading(false)
+     })
+
+    return () => {
+      isMounted = false
+      authListener.subscription.unsubscribe()
+    }
+  }, [])
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut()
+    } catch {
+      // ignore error, best-effort logout
+    } finally {
+      setCurrentUser(null)
+      setIsMenuOpen(false)
+      router.push("/")
+    }
+  }
 
   const navigation = [
     { name: "Overview", href: "/" },
     { name: "Market", href: "/market" },
-    { name: "Docs", href: "/docs" },
+    { name: "API", href: "/api" },
     { name: "Contact Us", href: "/contact" },
   ]
 
@@ -39,20 +89,51 @@ export function Header() {
           ))}
         </nav>
 
-        {/* Auth CTAs */}
+        {/* Auth / user area (desktop) */}
         <div className="hidden items-center gap-3 md:flex">
-          <Link
-            href="/auth/login"
-            className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-2 text-xs font-semibold tracking-wide text-gray-300 hover:border-gray-700 hover:bg-gray-900 transition-colors"
-          >
-            Log in
-          </Link>
-          <Link
-            href="/auth/signup"
-            className="rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-400 px-4 py-2 text-xs font-semibold tracking-wide text-gray-950 shadow-lg shadow-emerald-500/30 hover:from-emerald-400 hover:to-emerald-300 transition-colors"
-          >
-            Sign up
-          </Link>
+          {currentUser && !userLoading ? (
+            <>
+              <div className="flex items-center gap-2 rounded-full border border-gray-800 bg-gray-950 px-3 py-1 text-xs text-gray-300">
+                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-900 text-gray-300">
+                  <User className="h-3.5 w-3.5" />
+                </div>
+                <div>
+                  <span className="text-gray-500">Hi, </span>
+                  <span className="font-semibold text-emerald-300">
+                    {(() => {
+                      const username = (currentUser.user_metadata && currentUser.user_metadata.username) || ""
+                      if (username && typeof username === "string") return username
+                      const email: string | undefined = currentUser.email
+                      if (email) return email.split("@")[0]
+                      return "User"
+                    })()}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-2 text-xs font-semibold tracking-wide text-gray-300 hover:border-red-500/60 hover:text-red-300 hover:bg-gray-900 transition-colors"
+              >
+                Sign out
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/auth/login"
+                className="rounded-lg border border-gray-800 bg-gray-950 px-3 py-2 text-xs font-semibold tracking-wide text-gray-300 hover:border-gray-700 hover:bg-gray-900 transition-colors"
+              >
+                Log in
+              </Link>
+              <Link
+                href="/auth/signup"
+                className="rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-400 px-4 py-2 text-xs font-semibold tracking-wide text-gray-950 shadow-lg shadow-emerald-500/30 hover:from-emerald-400 hover:to-emerald-300 transition-colors"
+              >
+                Sign up
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Mobile menu button */}

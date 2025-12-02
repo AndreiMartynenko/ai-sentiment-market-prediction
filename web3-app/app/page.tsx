@@ -3,6 +3,8 @@
 import type React from 'react'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { supabase } from '../lib/supabaseClient'
 import {
   TrendingUp,
   ArrowUpRight,
@@ -26,6 +28,27 @@ export default function HomePage() {
   >(null)
   const [marketLoading, setMarketLoading] = useState(false)
   const [marketError, setMarketError] = useState<string | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const router = useRouter()
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function checkAuth() {
+      try {
+        const { data } = await supabase.auth.getUser()
+        if (!isMounted) return
+        setIsAuthenticated(!!data?.user)
+      } catch {
+        if (isMounted) setIsAuthenticated(false)
+      }
+    }
+
+    checkAuth()
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -110,18 +133,21 @@ export default function HomePage() {
             </p>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <Link
-                href="/dashboard"
+              <button
+                type="button"
+                onClick={() =>
+                  isAuthenticated ? router.push('/dashboard') : router.push('/auth/login')
+                }
                 className="btn-primary inline-flex items-center justify-center px-7 py-3 text-sm font-semibold"
               >
                 Launch Trading Dashboard
                 <ArrowUpRight className="ml-2 h-4 w-4" />
-              </Link>
+              </button>
               <Link
-                href="/docs"
+                href="/api"
                 className="btn-secondary inline-flex items-center justify-center px-7 py-3 text-sm font-semibold"
               >
-                View API Docs
+                View API
               </Link>
             </div>
 
@@ -334,52 +360,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Developer / docs CTA */}
-      <section className="bg-gray-950 py-14">
-        <div className="mx-auto max-w-6xl px-4">
-          <div className="grid gap-8 md:grid-cols-[1.4fr,1fr]">
-            <div className="space-y-4">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">For developers</h2>
-              <p className="text-lg font-medium text-gray-100">
-                Build on top of ProofOfSignal: integrate AI‑signals into your trading stack.
-              </p>
-              <p className="text-sm text-gray-500">
-                Connect via a standard HTTP API or WebSocket stream documented with OpenAPI, with
-                ready‑to‑use examples in Python, TypeScript, and Golang.
-              </p>
-              <div className="flex flex-wrap gap-3 text-[11px] text-gray-400">
-                <span className="rounded-full border border-gray-800 px-3 py-1">REST &amp; WebSocket API</span>
-                <span className="rounded-full border border-gray-800 px-3 py-1">Backtest‑friendly history</span>
-                <span className="rounded-full border border-gray-800 px-3 py-1">Latency‑optimized infra</span>
-              </div>
-              <div className="flex flex-wrap gap-3 pt-2">
-                <Link href="/docs" className="btn-primary px-6 py-2 text-xs font-semibold">
-                  Open Documentation
-                </Link>
-                <Link href="/contact" className="btn-secondary px-6 py-2 text-xs font-semibold">
-                  Talk to us
-                </Link>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-gray-900 bg-gray-950/90 p-4 text-[11px] text-gray-300">
-              <div className="mb-3 flex items-center justify-between text-xs text-gray-500">
-                <span className="font-mono text-[11px] text-gray-400">curl sentiment-api</span>
-                <span className="rounded-full bg-gray-900 px-2 py-0.5 text-[10px] text-emerald-300">demo</span>
-              </div>
-              <pre className="overflow-x-auto rounded-xl bg-black/60 p-3 text-[11px] text-emerald-100">
-{`curl -X POST https://api.proofofsignal.com/v1/signal \
-  -H "Authorization: Bearer &lt;API_KEY&gt;" \
-  -H "Content-Type: application/json" \
-  -d '{"pair":"BTCUSDT","timeframe":"5m"}'`}
-              </pre>
-              <div className="mt-3 text-[10px] text-gray-500">
-                Response includes signal, confidence, sentiment score, suggested risk and metadata for logging.
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
     </div>
   )
 }

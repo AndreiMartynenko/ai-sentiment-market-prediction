@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { supabase } from '../../lib/supabaseClient'
 
 const TOP_COIN_ICONS: Record<string, string> = {
   BTC: 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png?1547033579',
@@ -84,6 +85,26 @@ export default function MarketPage() {
   const [topLosers, setTopLosers] = useState<MarketRow[]>([])
   const [macroAssets, setMacroAssets] = useState<GlobalAsset[]>([])
   const [macroError, setMacroError] = useState<string | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function checkAuth() {
+      try {
+        const { data } = await supabase.auth.getUser()
+        if (!isMounted) return
+        setIsAuthenticated(!!data?.user)
+      } catch {
+        if (isMounted) setIsAuthenticated(false)
+      }
+    }
+
+    checkAuth()
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -234,7 +255,11 @@ export default function MarketPage() {
                       <button
                         key={row.pair}
                         type="button"
-                        onClick={() => router.push(`/dashboard?symbol=${encodeURIComponent(row.pair)}`)}
+                        onClick={() =>
+                          isAuthenticated
+                            ? router.push(`/dashboard?symbol=${encodeURIComponent(row.pair)}`)
+                            : router.push('/auth/login')
+                        }
                         className="flex w-full items-center justify-between rounded-lg bg-gray-950/40 px-2 py-1.5 text-left text-[12px] ring-1 ring-transparent hover:bg-gray-900/80 hover:ring-emerald-500/40"
                       >
                         <div className="flex flex-col">
@@ -280,7 +305,11 @@ export default function MarketPage() {
                       <button
                         key={row.pair}
                         type="button"
-                        onClick={() => router.push(`/dashboard?symbol=${encodeURIComponent(row.pair)}`)}
+                        onClick={() =>
+                          isAuthenticated
+                            ? router.push(`/dashboard?symbol=${encodeURIComponent(row.pair)}`)
+                            : router.push('/auth/login')
+                        }
                         className="flex w-full items-center justify-between rounded-lg bg-gray-950/40 px-2 py-1.5 text-left text-[12px] ring-1 ring-transparent hover:bg-gray-900/80 hover:ring-red-500/40"
                       >
                         <div className="flex flex-col">
@@ -433,7 +462,11 @@ export default function MarketPage() {
                   <tr
                     key={row.pair}
                     className="cursor-pointer border-b border-gray-900/80 last:border-0 hover:bg-gray-900/60"
-                    onClick={() => router.push(`/dashboard?symbol=${encodeURIComponent(row.pair)}`)}
+                    onClick={() =>
+                      isAuthenticated
+                        ? router.push(`/dashboard?symbol=${encodeURIComponent(row.pair)}`)
+                        : router.push('/auth/login')
+                    }
                   >
                     <td className="px-4 py-2">
                       <div className="flex items-center gap-2">
