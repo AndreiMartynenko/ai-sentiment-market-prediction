@@ -76,6 +76,17 @@ type TradeSignal = {
   reasons: string[]
 }
 
+type StoredSignalNotification = {
+  symbol: string
+  pair: string
+  side: TradeSide
+  confidence: number
+  entryPrice: number
+  takeProfit: number
+  stopLoss: number
+  createdAt: string
+}
+
 type TradingViewWidgetProps = {
   symbol: string
 }
@@ -310,6 +321,9 @@ export default function TradingDashboardPage(): React.JSX.Element {
 
   const [recentSymbols, setRecentSymbols] = useState<string[]>([])
 
+  const [activeSignal, setActiveSignal] = useState<StoredSignalNotification | null>(null)
+  const [signalToastVisible, setSignalToastVisible] = useState(false)
+
   const sentimentNews =
     newsSentimentEnabled && news.length > 0
       ? news.filter((n) => typeof n.sentimentScore === 'number' && !Number.isNaN(n.sentimentScore))
@@ -338,6 +352,20 @@ export default function TradingDashboardPage(): React.JSX.Element {
     })
   }
 
+  const NOTIFICATION_STORAGE_KEY = 'pos_signal_notifications_v1'
+
+  const persistSignalNotification = (signal: StoredSignalNotification) => {
+    if (typeof window === 'undefined') return
+    try {
+      const raw = window.localStorage.getItem(NOTIFICATION_STORAGE_KEY)
+      const existing: StoredSignalNotification[] = raw ? JSON.parse(raw) : []
+      const updated = [signal, ...existing].slice(0, 20)
+      window.localStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify(updated))
+    } catch (e) {
+      console.error('persistSignalNotification error', e)
+    }
+  }
+
   // 0) Initialize symbol from ?symbol= query if provided
   useEffect(() => {
     const fromQuery = searchParams.get('symbol')
@@ -361,6 +389,24 @@ export default function TradingDashboardPage(): React.JSX.Element {
 
     setIsCheckingAuth(false)
   }, [router])
+
+  // 1b) Load latest stored notification (if any) so user sees it even if it was generated earlier
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const raw = window.localStorage.getItem(NOTIFICATION_STORAGE_KEY)
+      if (!raw) return
+
+      const stored: StoredSignalNotification[] = JSON.parse(raw)
+      if (!Array.isArray(stored) || stored.length === 0) return
+
+      const latest = stored[0]
+      setActiveSignal(latest)
+      setSignalToastVisible(true)
+    } catch (e) {
+      console.error('load stored notifications error', e)
+    }
+  }, [])
 
   // 2) News loader
   useEffect(() => {
@@ -410,6 +456,89 @@ export default function TradingDashboardPage(): React.JSX.Element {
       cancelled = true
     }
   }, [selectedSymbol])
+
+  // 4) Background-style scanner for strong signals on top markets
+  useEffect(() => {
+    let cancelled = false
+    let intervalId: number | undefined
+
+    const scanTopMarkets = async () => {
+      try {
+        const res = await fetch('/api/markets/top')
+        if (!res.ok) return
+
+        const data = await res.json()
+        const markets: { pair: string; price: number }[] = data.markets || []
+
+        // Only look at first 10 entries for now
+        for (const m of markets.slice(0, 10)) {
+          if (cancelled) return
+
+          const symbol = m.pair
+
+          try {
+            const indRes = await fetch(`/api/indicators?symbol=${encodeURIComponent(symbol)}`)
+            if (!indRes.ok) continue
+
+            const indData = (await indRes.json()) as IndicatorsData
+
+            // Use neutral sentiment for background scan; dashboard view still uses real sentiment
+            const trade = computeTradeSignal(indData, 'Neutral', 0)
+
+            const isStrong = trade.side !== 'HOLD' && trade.confidence >= 0.8
+            if (!isStrong) continue
+
+            const price = Number(m.price)
+            if (!Number.isFinite(price) || price <= 0) continue
+
+            let entryPrice = price
+            let takeProfit = price
+            let stopLoss = price
+
+            if (trade.side === 'BUY') {
+              entryPrice = price * 0.995
+              takeProfit = price * 1.02
+              stopLoss = price * 0.985
+            } else if (trade.side === 'SHORT') {
+              entryPrice = price * 1.005
+              takeProfit = price * 0.98
+              stopLoss = price * 1.015
+            }
+
+            if (cancelled) return
+
+            const storedSignal: StoredSignalNotification = {
+              symbol,
+              pair: symbol.replace('USDT', '/USDT'),
+              side: trade.side,
+              confidence: trade.confidence,
+              entryPrice,
+              takeProfit,
+              stopLoss,
+              createdAt: new Date().toISOString(),
+            }
+
+            setActiveSignal(storedSignal)
+            persistSignalNotification(storedSignal)
+            setSignalToastVisible(true)
+            break
+          } catch (e) {
+            console.error('scanTopMarkets indicator error', symbol, e)
+          }
+        }
+      } catch (e) {
+        console.error('scanTopMarkets error', e)
+      }
+    }
+
+    scanTopMarkets()
+    intervalId = window.setInterval(scanTopMarkets, 180000) // ~3 minutes
+
+    return () => {
+      cancelled = true
+      if (intervalId) window.clearInterval(intervalId)
+    }
+  }, [])
 
   // 3) Indicators loader
   useEffect(() => {
@@ -589,8 +718,14 @@ export default function TradingDashboardPage(): React.JSX.Element {
                     'border-gray-700 bg-gray-900 text-gray-300'
                 }
 
+                const isActiveForSymbol =
+                  activeSignal && activeSignal.symbol === indicators.symbol
+
                 return (
-                  <div className="rounded-2xl border border-gray-900 bg-gray-950/80 p-4 text-xs">
+                  <div
+                    id="ai-trade-signal-card"
+                    className="rounded-2xl border border-gray-900 bg-gray-950/80 p-4 text-xs"
+                  >
                     <div className="mb-3 flex items-center justify-between gap-3">
                       <div>
                         <h2 className="text-sm font-semibold text-gray-100">
@@ -618,6 +753,37 @@ export default function TradingDashboardPage(): React.JSX.Element {
                         style={{ width: `${confidencePct}%` }}
                       />
                     </div>
+
+                    {isActiveForSymbol && activeSignal && (
+                      <div className="mb-3 rounded-lg border border-emerald-700/70 bg-emerald-500/5 px-3 py-2 text-[11px] text-gray-100">
+                        <div className="mb-1 flex items-center justify-between">
+                          <span className="font-semibold">Suggested plan</span>
+                          <span className="font-mono text-[10px] text-emerald-300">
+                            from background scan
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-[11px]">
+                          <div>
+                            <div className="text-[10px] text-gray-400">Entry</div>
+                            <div className="font-mono text-xs">
+                              {activeSignal.entryPrice.toFixed(4)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-gray-400">Take profit</div>
+                            <div className="font-mono text-xs text-emerald-300">
+                              {activeSignal.takeProfit.toFixed(4)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-gray-400">Stop loss</div>
+                            <div className="font-mono text-xs text-red-300">
+                              {activeSignal.stopLoss.toFixed(4)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     <ul className="space-y-1 text-[11px] text-gray-400">
                       {trade.reasons.map((reason, idx) => (
