@@ -213,10 +213,10 @@ export default function MarketPage() {
             </p>
           </div>
           <Link
-            href="/dashboard"
+            href={isAuthenticated ? '/dashboard' : '/auth/signup'}
             className="rounded-full border border-gray-800 bg-gray-900 px-3 py-1 text-xs text-gray-300 hover:border-emerald-500/40 hover:text-emerald-200"
           >
-            ← Back to dashboard
+            {isAuthenticated ? '← Back to platform' : '→ Go to platform'}
           </Link>
         </header>
 

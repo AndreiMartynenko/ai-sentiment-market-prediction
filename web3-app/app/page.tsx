@@ -3,6 +3,7 @@
 import type React from 'react'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { supabase } from '../lib/supabaseClient'
 import {
@@ -140,7 +141,7 @@ export default function HomePage() {
                 }
                 className="btn-primary inline-flex items-center justify-center px-7 py-3 text-sm font-semibold"
               >
-                Launch Trading Dashboard
+                Launch Trading Platform
                 <ArrowUpRight className="ml-2 h-4 w-4" />
               </button>
               <Link
@@ -313,50 +314,231 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* How it works / features */}
-      <section className="border-b border-gray-900/60 bg-gray-950 py-14">
+      {/* Make better investment decisions / inline SVG visual */}
+      <section className="border-b border-gray-900/60 bg-gray-950 py-16">
         <div className="mx-auto max-w-6xl px-4">
-          <div className="mb-8 max-w-2xl">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">How It Works</h2>
-            <p className="mt-2 text-lg font-medium text-gray-100">From raw data streams to actionable signals.</p>
-            <p className="mt-2 text-sm text-gray-500">
-              ProofOfSignal combines market data, on‑chain activity, and social‑media NLP models in a
-              latency‑optimized pipeline to turn noisy streams into clean, tradable signals.
+          <div className="mb-8 flex flex-col gap-3 text-center md:text-left">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.25em] text-emerald-400">ProofOfSignal in action</h2>
+            <p className="text-2xl font-semibold tracking-tight text-gray-50 sm:text-3xl">
+              Make better investment decisions.
+            </p>
+            <p className="max-w-3xl text-sm text-gray-500 md:text-base">
+              With ProofOfSignal, live price action, sentiment, and news sit on one canvas, so you can move from
+              raw information to clear conviction instead of guessing off noise.
             </p>
           </div>
 
-          <div className="grid gap-5 md:grid-cols-3">
-            <div className="rounded-2xl border border-gray-900 bg-gray-950/80 p-5">
-              <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10">
-                <TrendingUp className="h-4 w-4 text-emerald-400" />
+          <div className="overflow-hidden rounded-3xl border border-gray-900 bg-gradient-to-b from-gray-900 via-gray-950 to-black shadow-[0_0_80px_rgba(16,185,129,0.5)]">
+            <div className="relative">
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgba(16,185,129,0.3),transparent_55%),radial-gradient(circle_at_100%_100%,rgba(56,189,248,0.25),transparent_55%)] mix-blend-screen" />
+              <div className="relative">
+                <Image
+                  src="/trading-dashboard.png"
+                  alt="ProofOfSignal trading dashboard screenshot"
+                  width={1600}
+                  height={900}
+                  className="h-full w-full object-cover"
+                  priority
+                />
               </div>
-              <h3 className="mb-2 text-sm font-semibold text-gray-100">Signal Engine</h3>
-              <p className="text-xs text-gray-500">
-                Ensemble models analyze order flow, funding, volatility, and news flow, producing
-                BUY/SELL/NEUTRAL signals for each market in real time.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-gray-900 bg-gray-950/80 p-5">
-              <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10">
-                <Signal className="h-4 w-4 text-emerald-400" />
-              </div>
-              <h3 className="mb-2 text-sm font-semibold text-gray-100">Risk Layer</h3>
-              <p className="text-xs text-gray-500">
-                Per‑signal risk controls: position sizing, max drawdown limits, and dynamic stop‑loss logic
-                tailored to each strategy.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-gray-900 bg-gray-950/80 p-5">
-              <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10">
-                <BarChart3 className="h-4 w-4 text-emerald-400" />
-              </div>
-              <h3 className="mb-2 text-sm font-semibold text-gray-100">API for Builders</h3>
-              <p className="text-xs text-gray-500">
-                A simple API to plug into your bot, dApp, or quant stack with JSON/REST endpoints and
-                WebSocket feeds ready for production use.
-              </p>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="border-b border-gray-900/60 bg-black/90 py-16">
+        <div className="mx-auto max-w-6xl px-4">
+          <div className="mb-10 max-w-3xl text-center md:text-left">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-gray-500">Inside the dashboard</h2>
+            <p className="mt-2 text-xl font-semibold tracking-tight text-gray-100 sm:text-2xl">
+              Every panel tells you something different about the market.
+            </p>
+          </div>
+
+          <div className="grid items-center gap-10 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+            <div className="overflow-hidden rounded-3xl border border-gray-900 bg-gradient-to-br from-gray-900 via-gray-950 to-black">
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-emerald-500/15 via-transparent to-sky-500/15 mix-blend-screen" />
+                <Image
+                  src="/news.png"
+                  alt="Dashboard news and sentiment section"
+                  width={1600}
+                  height={900}
+                  className="h-full w-full object-cover object-center"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <p className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+                News & context
+              </p>
+              <h3 className="text-lg font-semibold tracking-tight text-gray-100 sm:text-xl">
+                News panel keeps you ahead of the narrative.
+              </h3>
+              <p className="text-sm text-gray-400">
+                The right-hand column surfaces headlines scored by our NLP models, so you instantly see whether
+                the news flow around BTC, ETH, or any asset is bullish, bearish, or just noise.
+              </p>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li className="flex items-start gap-2">
+                  <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  <span>Color-coded tags show sentiment for each story at a glance.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-sky-400" />
+                  <span>Confidence scores help you weigh one headline against the rest of the feed.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-gray-900/60 bg-black py-16">
+        <div className="mx-auto max-w-6xl px-4">
+          <div className="grid items-center gap-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+            <div className="order-2 space-y-4 md:order-1">
+              <p className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+                Trade signal
+              </p>
+              <h3 className="text-lg font-semibold tracking-tight text-gray-100 sm:text-xl">
+                One clear signal to BUY, SELL, or HOLD.
+              </h3>
+              <p className="text-sm text-gray-400">
+                Under the chart, the trade‑signal card distills sentiment, order flow, volatility and
+                trend into a simple BUY / SELL / HOLD decision with a confidence bar you can actually act on.
+              </p>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li className="flex items-start gap-2">
+                  <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  <span>Use the confidence meter to size positions instead of trading on gut feel.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-amber-400" />
+                  <span>Timeframe labels keep scalps, swings, and longer‑term views clearly separated.</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="order-1 overflow-hidden rounded-3xl border border-gray-900 bg-gradient-to-br from-gray-900 via-gray-950 to-black md:order-2">
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-bl from-emerald-500/20 via-transparent to-fuchsia-500/20 mix-blend-screen" />
+                <Image
+                  src="/trade signal.png"
+                  alt="Dashboard trade signal card"
+                  width={1600}
+                  height={900}
+                  className="h-full w-full object-cover object-bottom"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-gray-900/60 bg-black py-16">
+        <div className="mx-auto max-w-6xl px-4">
+          <div className="grid items-center gap-10 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+            <div className="overflow-hidden rounded-3xl border border-gray-900 bg-gradient-to-br from-gray-900 via-gray-950 to-black">
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-fuchsia-500/20 via-transparent to-sky-500/20 mix-blend-screen" />
+                <Image
+                  src="/algo-signals.png"
+                  alt="Algo signals engine overview"
+                  width={1600}
+                  height={900}
+                  className="h-full w-full object-cover object-center"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <p className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+                Algo signals engine
+              </p>
+              <h3 className="text-lg font-semibold tracking-tight text-gray-100 sm:text-xl">
+                Under the hood, multiple models agree before a signal goes live.
+              </h3>
+              <p className="text-sm text-gray-400">
+                The Algo‑Signals view shows how our different models combine order flow, volatility, funding,
+                sentiment and on‑chain activity into one unified conviction score for each market.
+              </p>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li className="flex items-start gap-2">
+                  <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  <span>See which factors are driving a signal instead of trusting a black box.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-sky-400" />
+                  <span>Helps you align discretionary views with what the algo stack is actually seeing.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-gray-900/60 bg-gray-950 py-16">
+        <div className="mx-auto max-w-6xl px-4">
+          <div className="grid items-center gap-10 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+            <div className="overflow-hidden rounded-3xl border border-gray-900 bg-gradient-to-br from-gray-900 via-gray-950 to-black">
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-amber-400/20 via-transparent to-emerald-400/20 mix-blend-screen" />
+                <Image
+                  src="/rsi.png"
+                  alt="Dashboard RSI and market regime section"
+                  width={1600}
+                  height={900}
+                  className="h-full w-full object-cover object-bottom"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <p className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+                Average Crypto RSI
+              </p>
+              <h3 className="text-lg font-semibold tracking-tight text-gray-100 sm:text-xl">
+                RSI panel shows when the whole market is stretched.
+              </h3>
+              <p className="text-sm text-gray-400">
+                The Average Crypto RSI card aggregates momentum across top markets, so you instantly see
+                whether risk assets are extended, oversold, or sitting in a neutral regime.
+              </p>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li className="flex items-start gap-2">
+                  <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  <span>Helps you avoid buying tops or panic‑selling bottoms when emotions run hot.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-sky-400" />
+                  <span>Pairs perfectly with the AI Trade Signal to separate signal from background noise.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Call-to-action */}
+      <section className="border-b border-gray-900/60 bg-black py-16">
+        <div className="mx-auto flex max-w-3xl flex-col items-center px-4 text-center">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-400">Try it</h2>
+          <p className="mt-3 text-2xl font-semibold tracking-tight text-gray-50 sm:text-3xl">
+            Launch the ProofOfSignal trading platform.
+          </p>
+          <p className="mt-3 text-sm text-gray-400 md:text-base">
+            Create your account and explore live signals.
+          </p>
+
+          <Link
+            href="/auth/signup"
+            className="btn-primary mt-6 inline-flex items-center justify-center px-7 py-3 text-sm font-semibold"
+          >
+            Launch Trading Platform
+            <ArrowUpRight className="ml-2 h-4 w-4" />
+          </Link>
         </div>
       </section>
 
