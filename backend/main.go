@@ -112,3 +112,6 @@ func main() {
 		log.Fatal("Failed to start server:", err)
 	}
 }
+
+// should i use gin or fasthttp?
+// gin is easier to use and has more features
