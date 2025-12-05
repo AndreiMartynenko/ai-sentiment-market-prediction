@@ -785,6 +785,41 @@ export default function TradingDashboardPage(): React.JSX.Element {
                       </div>
                     )}
 
+                    {/* Solana Proof (mocked for now) */}
+                    <div className="mb-3 rounded-lg border border-purple-700/70 bg-purple-500/5 px-3 py-2 text-[11px] text-gray-100">
+                      <div className="mb-1 flex items-center justify-between">
+                        <span className="font-semibold">Solana Proof</span>
+                        <span className="font-mono text-[10px] text-purple-300">
+                          devnet (mock)
+                        </span>
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] text-gray-400">Status</span>
+                          <span className="rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-medium text-purple-200">
+                            Verified on Solana (mock)
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] text-gray-400">Proof hash</span>
+                          <span className="font-mono text-[10px] text-gray-200">
+                            abcd...1234
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] text-gray-400">Explorer</span>
+                          <a
+                            href="https://solscan.io/tx/EXAMPLE_TX_SIGNATURE?cluster=devnet"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[10px] text-purple-300 underline hover:text-purple-200"
+                          >
+                            View on Solscan (mock)
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+
                     <ul className="space-y-1 text-[11px] text-gray-400">
                       {trade.reasons.map((reason, idx) => (
                         <li key={idx} className="flex gap-1.5">
