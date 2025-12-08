@@ -398,6 +398,62 @@ export default function HomePage() {
       <section className="border-b border-gray-900/60 bg-black py-16">
         <div className="mx-auto max-w-6xl px-4">
           <div className="grid items-center gap-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+            <div className="space-y-4">
+              <p className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
+                Proof-of-Signal on Solana
+              </p>
+              <h3 className="text-lg font-semibold tracking-tight text-gray-100 sm:text-xl">
+                Every AI signal can be verified on-chain.
+              </h3>
+              <p className="text-sm text-gray-400">
+                When the engine flags a strong opportunity, ProofOfSignal can hash the payload and write a
+                record to Solana. That means you can always prove when a signal was created and what the
+                model actually saw at the time.
+              </p>
+              <ul className="space-y-2 text-sm text-gray-400">
+                <li className="flex items-start gap-2">
+                  <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  <span>
+                    Blockchain timestamps turn each AI decision into an auditable event instead of an
+                    untracked alert.
+                  </span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-sky-400" />
+                  <span>
+                    On-chain proof helps you backtest performance honestly&mdash;no cherry-picking or deleted
+                    signals.
+                  </span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-fuchsia-400" />
+                  <span>
+                    In the future, protocols and funds can subscribe directly to these verifiable signals as
+                    an on-chain data feed.
+                  </span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="overflow-hidden rounded-3xl border border-gray-900 bg-gradient-to-br from-gray-900 via-gray-950 to-black">
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-emerald-500/20 via-transparent to-fuchsia-500/20 mix-blend-screen" />
+                <Image
+                  src="/signal_blockchain.png"
+                  alt="AI trading signals anchored on the Solana blockchain"
+                  width={1600}
+                  height={900}
+                  className="h-full w-full object-cover object-center"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-gray-900/60 bg-black py-16">
+        <div className="mx-auto max-w-6xl px-4">
+          <div className="grid items-center gap-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
             <div className="order-2 space-y-4 md:order-1">
               <p className="inline-flex items-center rounded-full border border-emerald-500/30 bg-emerald-500/5 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-300">
                 Trade signal
