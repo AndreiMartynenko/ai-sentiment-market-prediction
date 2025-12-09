@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
-import { TrendingUp, Menu, X, User } from "lucide-react"
+import { Menu, X, User } from "lucide-react"
 import { supabase } from "../../lib/supabaseClient"
 
 export function Header() {
@@ -69,14 +70,18 @@ export function Header() {
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-500/30">
-            <TrendingUp className="h-5 w-5 text-gray-950" />
-          </div>
-          <div className="flex flex-col leading-tight">
-            <span className="text-sm font-semibold tracking-wide text-gray-300">
-              ProofOfSignal
-            </span>
-            <span className="text-xs text-gray-500">AI Sentiment Engine</span>
+          <Image
+            src="/logos/7.png"
+            alt="ProofOfSignal logo"
+            width={36}
+            height={36}
+            className="h-9 w-9 rounded-xl object-contain"
+            priority
+          />
+          <div className="flex flex-col leading-tight text-[10px] font-semibold uppercase tracking-[0.22em]">
+            <span className="text-gray-100">Proof</span>
+            <span className="text-gray-100">Of</span>
+            <span className="text-emerald-300">Signal</span>
           </div>
         </Link>
 
