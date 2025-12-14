@@ -112,3 +112,5 @@ func main() {
 		log.Fatal("Failed to start server:", err)
 	}
 }
+
+// explain the business logic
