@@ -1,3 +1,6 @@
+//go:build ignore
+// +build ignore
+
 package main
 
 import (
@@ -10,7 +13,6 @@ import (
 
 	"github.com/AndreiMartynenko/golang-api/handlers"
 )
-
 
 func main() {
 	err := godotenv.Load("../.env")

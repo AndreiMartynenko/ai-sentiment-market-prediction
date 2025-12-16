@@ -13,6 +13,17 @@ import (
 // HealthCheck verifies the health of the API and database
 func HealthCheck(database *db.Connection) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if database == nil || database.DB == nil {
+			c.JSON(http.StatusOK, models.HealthResponse{
+				Status:    "healthy",
+				Service:   "AI Sentiment Market Prediction API",
+				Version:   "1.0.0",
+				Database:  "disconnected",
+				MLService: "unknown",
+			})
+			return
+		}
+
 		if err := database.DB.Ping(); err != nil {
 			c.JSON(http.StatusServiceUnavailable, models.HealthResponse{
 				Status:    "unhealthy",

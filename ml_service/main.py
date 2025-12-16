@@ -16,6 +16,8 @@ from ml_service.indicators import get_indicators
 from ml_service.hybrid_engine import get_engine
 from ml_service.solana_layer import send_proof
 from ml_service.news import get_crypto_news_manager
+from ml_service.crypto_data import get_crypto_data_manager
+from ml_service.institutional_signal import generate_institutional_signal, generate_institutional_signal_debug
 
 # Setup logging
 logging.basicConfig(
@@ -121,6 +123,11 @@ class NewsResponse(BaseModel):
     source: str
     last_updated: str
 
+class InstitutionalSignalRequest(BaseModel):
+    symbol: str = Field(..., description="Trading symbol (e.g., BTCUSDT)")
+    timeframe: Optional[str] = Field("15m", description="Execution timeframe: 5m, 15m, or 1h")
+    use_sentiment: Optional[bool] = Field(False, description="Enable strict news sentiment gating")
+
 # In-memory signal storage (optional, for listing)
 signals_cache = []
 
@@ -178,6 +185,68 @@ async def analyze_sentiment(request: SentimentRequest):
     except Exception as e:
         logger.error(f"Error in sentiment analysis: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/signal/institutional")
+async def institutional_signal(request: InstitutionalSignalRequest):
+    """Institutional-grade signal endpoint (strict NO_TRADE-by-default)."""
+    try:
+        timeframe = (request.timeframe or "15m").strip()
+        if timeframe not in {"5m", "15m", "1h"}:
+            raise HTTPException(status_code=400, detail="Invalid timeframe. Use 5m, 15m, or 1h.")
+
+        data_manager = get_crypto_data_manager()
+        if request.use_sentiment:
+            result, _debug = generate_institutional_signal_debug(
+                symbol=request.symbol,
+                data_manager=data_manager,
+                news_manager=news_manager,
+                timeframe=timeframe,
+                use_sentiment=True,
+            )
+        else:
+            result = generate_institutional_signal(
+                symbol=request.symbol,
+                data_manager=data_manager,
+                news_manager=news_manager,
+                timeframe=timeframe,
+            )
+
+        # Strict output requirement: only JSON (FastAPI returns dict as JSON)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating institutional signal: {e}")
+        return {"signal": "NO_TRADE", "reason": "insufficient confluence"}
+
+
+@app.post("/signal/institutional/debug")
+async def institutional_signal_debug(request: InstitutionalSignalRequest):
+    """Debug version of the institutional signal endpoint (includes gate diagnostics)."""
+    try:
+        timeframe = (request.timeframe or "15m").strip()
+        if timeframe not in {"5m", "15m", "1h"}:
+            raise HTTPException(status_code=400, detail="Invalid timeframe. Use 5m, 15m, or 1h.")
+
+        data_manager = get_crypto_data_manager()
+        result, debug = generate_institutional_signal_debug(
+            symbol=request.symbol,
+            data_manager=data_manager,
+            news_manager=news_manager,
+            timeframe=timeframe,
+            use_sentiment=bool(request.use_sentiment),
+        )
+
+        return {"result": result, "debug": debug}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating institutional signal debug: {e}")
+        return {
+            "result": {"signal": "NO_TRADE", "reason": "insufficient confluence"},
+            "debug": {"error": str(e)},
+        }
 
 # Technical indicators endpoint (no database saving)
 @app.post("/technical", response_model=TechnicalResponse)

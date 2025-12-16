@@ -1,3 +1,6 @@
+//go:build legacy
+// +build legacy
+
 package services
 
 import (
@@ -6,8 +9,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/AndreiMartynenko/ai-sentiment-market-prediction/internal/models"
-	_ "github.com/lib/pq"
+	"ai_sentiment-market-prediction/internal/models"
 )
 
 type SignalService struct {

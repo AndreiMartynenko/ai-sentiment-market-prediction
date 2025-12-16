@@ -5,8 +5,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/AndreiMartynenko/ai-sentiment-market-prediction/internal/models"
-	"github.com/AndreiMartynenko/ai-sentiment-market-prediction/internal/services"
+	"ai_sentiment-market-prediction/internal/models"
+	"ai_sentiment-market-prediction/internal/services"
+
 	"github.com/gin-gonic/gin"
 )
 

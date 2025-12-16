@@ -1,3 +1,6 @@
+//go:build legacy
+// +build legacy
+
 package services
 
 import (
@@ -8,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/AndreiMartynenko/ai-sentiment-market-prediction/internal/models"
+	"ai_sentiment-market-prediction/internal/models"
 )
 
 type SentimentService struct {
