@@ -10,6 +10,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var binanceBaseURL = "https://api.binance.com"
+
 type binancePriceResponse struct {
 	Symbol string `json:"symbol"`
 	Price  string `json:"price"`
@@ -17,7 +19,6 @@ type binancePriceResponse struct {
 
 func GetGatewayPrice() gin.HandlerFunc {
 	client := &http.Client{Timeout: 10 * time.Second}
-	binanceBase := "https://api.binance.com"
 
 	return func(c *gin.Context) {
 		symbol := strings.ToUpper(strings.TrimSpace(c.Query("symbol")))
@@ -26,7 +27,7 @@ func GetGatewayPrice() gin.HandlerFunc {
 			return
 		}
 
-		url := fmt.Sprintf("%s/api/v3/ticker/price?symbol=%s", binanceBase, symbol)
+		url := fmt.Sprintf("%s/api/v3/ticker/price?symbol=%s", strings.TrimRight(binanceBaseURL, "/"), symbol)
 		req, err := http.NewRequest(http.MethodGet, url, nil)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create request"})

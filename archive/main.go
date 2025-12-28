@@ -1,5 +1,5 @@
-//go:build ignore
-// +build ignore
+//go:build legacy
+// +build legacy
 
 package main
 

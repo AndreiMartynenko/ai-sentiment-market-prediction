@@ -1,3 +1,6 @@
+//go:build legacy
+// +build legacy
+
 package main
 
 import (
@@ -58,8 +61,8 @@ func main() {
 				"data": gin.H{
 					"sentiment":  "POSITIVE",
 					"confidence": 0.85,
-					"model":     "mock",
-					"text":      request.Text,
+					"model":      "mock",
+					"text":       request.Text,
 				},
 			}
 
@@ -85,11 +88,11 @@ func main() {
 			var signals []gin.H
 			for _, symbol := range request.Symbols {
 				signals = append(signals, gin.H{
-					"symbol":         symbol,
-					"action":         "BUY",
-					"strength":       0.75,
-					"confidence":     0.80,
-					"reasoning":      fmt.Sprintf("Positive sentiment detected for %s", symbol),
+					"symbol":          symbol,
+					"action":          "BUY",
+					"strength":        0.75,
+					"confidence":      0.80,
+					"reasoning":       fmt.Sprintf("Positive sentiment detected for %s", symbol),
 					"sentiment_score": 0.85,
 				})
 			}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -173,8 +174,7 @@ func summarize(tf gatewayTimeframe, closes []float64) *indicatorSummary {
 }
 
 func fetchKlines(client *http.Client, symbol string, tf gatewayTimeframe, limit int) ([]float64, error) {
-	binanceBase := "https://api.binance.com"
-	url := fmt.Sprintf("%s/api/v3/klines?symbol=%s&interval=%s&limit=%d", binanceBase, symbol, tf, limit)
+	url := fmt.Sprintf("%s/api/v3/klines?symbol=%s&interval=%s&limit=%d", strings.TrimRight(binanceBaseURL, "/"), symbol, tf, limit)
 	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
@@ -200,20 +200,13 @@ func fetchKlines(client *http.Client, symbol string, tf gatewayTimeframe, limit 
 		if !ok {
 			continue
 		}
-		v, err := strconvParseFloat(s)
+		v, err := strconv.ParseFloat(s, 64)
 		if err != nil {
 			continue
 		}
 		closes = append(closes, v)
 	}
 	return closes, nil
-}
-
-func strconvParseFloat(s string) (float64, error) {
-	// local helper to avoid importing strconv in many places
-	var f float64
-	_, err := fmt.Sscan(s, &f)
-	return f, err
 }
 
 func GetGatewayIndicators() gin.HandlerFunc {
