@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 
+const GO_BACKEND_URL = process.env.GO_BACKEND_URL || 'http://localhost:8080'
+
 type Timeframe = '5m' | '15m' | '1h' | '4h' | '1d'
 
 type IndicatorSummary = {
@@ -170,41 +172,14 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const symbol = searchParams.get('symbol') || 'BTCUSDT'
 
-    const timeframes: Timeframe[] = ['5m', '15m', '1h', '4h', '1d']
-
-    const results = await Promise.all(
-      timeframes.map(async (tf) => {
-        const klines = await fetchKlines(symbol, tf)
-        const closes = klines.map((k) => k.close)
-        const summary = summarize(tf, closes)
-        return { timeframe: tf, summary }
-      }),
-    )
-
-    const scalping: IndicatorSummary[] = []
-    const swing: IndicatorSummary[] = []
-
-    for (const { timeframe, summary } of results) {
-      if (!summary) continue
-
-      // Scalping: 5m, 15m, 1h
-      if (timeframe === '5m' || timeframe === '15m' || timeframe === '1h') {
-        scalping.push(summary)
-      }
-
-      // Swing / Daytrading: 4h, 1d
-      if (timeframe === '4h' || timeframe === '1d') {
-        swing.push(summary)
-      }
+    const res = await fetch(`${GO_BACKEND_URL}/api/v1/indicators?symbol=${encodeURIComponent(symbol)}`, {
+      cache: 'no-store',
+    })
+    const text = await res.text()
+    if (!res.ok) {
+      return NextResponse.json({ error: 'Gateway request failed', status: res.status, body: text }, { status: 502 })
     }
-
-    const payload: IndicatorsResponse = {
-      symbol,
-      scalping,
-      swing,
-    }
-
-    return NextResponse.json(payload)
+    return new NextResponse(text, { status: 200, headers: { 'Content-Type': 'application/json' } })
   } catch (e: any) {
     console.error('Indicators API error:', e)
     return NextResponse.json(

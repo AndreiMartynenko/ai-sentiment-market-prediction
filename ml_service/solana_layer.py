@@ -28,7 +28,7 @@ except ImportError:
     Client = Transaction = TransferParams = transfer = Keypair = TxOpts = None
     SOLANA_AVAILABLE = False
 
-SOLANA_RPC_URL = os.getenv("SOLANA_RPC_URL", "https://api.testnet.solana.com")
+SOLANA_RPC_URL = os.getenv("SOLANA_RPC_URL", "https://api.devnet.solana.com")
 WALLET_FILE = os.getenv("SOLANA_WALLET_FILE", "solana_wallet.json")
 
 client = Client(SOLANA_RPC_URL) if SOLANA_AVAILABLE else None

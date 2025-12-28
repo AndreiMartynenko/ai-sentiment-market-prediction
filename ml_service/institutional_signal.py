@@ -34,6 +34,30 @@ StructureState = Literal["BULLISH", "BEARISH", "UNCLEAR"]
 Timeframe = Literal["5m", "15m", "1h"]
 
 
+def _no_trade_payload(
+    *,
+    timeframe: Timeframe,
+    failed_gate: str,
+    explain: str,
+    extra: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "signal": "NO_TRADE",
+        "reason": "insufficient confluence",
+        "timeframe": timeframe,
+        "confidence_score": 0,
+        "failed_gate": failed_gate,
+        "explain": [explain],
+        "entry_price": None,
+        "stop_loss": None,
+        "take_profit": None,
+        "risk_reward": None,
+    }
+    if extra:
+        payload.update(extra)
+    return payload
+
+
 @dataclass
 class RegimeResult:
     market_regime: MarketRegime
@@ -440,8 +464,11 @@ def compute_entry_and_risk(
     *,
     df_exec: pd.DataFrame,
     side: Literal["LONG", "SHORT"],
-    sweep_level: float,
+    sweep_level: Optional[float],
     timeframe: Timeframe,
+    debug_out: Optional[Dict[str, Any]] = None,
+    preset: str = "balanced",
+    rules: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     close = df_exec["close"].astype(float)
     rsi = _rsi(close, 14)
@@ -459,42 +486,150 @@ def compute_entry_and_risk(
     last_vol = float(last["volume"])
     avg_vol = float(vol_sma.iloc[-1]) if not pd.isna(vol_sma.iloc[-1]) else 0.0
 
+    if debug_out is not None:
+        debug_out.update(
+            {
+                "entry_price": entry,
+                "last_rsi": last_rsi,
+                "prev_rsi": prev_rsi,
+                "vwap": last_vwap,
+                "last_volume": last_vol,
+                "avg_volume": avg_vol,
+                "checks": {},
+            }
+        )
+
+    rules_in = rules or {}
+    enable_vwap = bool(rules_in.get("enable_vwap", True))
+    enable_volume = bool(rules_in.get("enable_volume", True))
+    enable_stop_cap = bool(rules_in.get("enable_stop_cap", True))
+
+    preset_norm = (preset or "balanced").strip().lower()
+    if preset_norm not in {"strict", "balanced", "aggressive"}:
+        preset_norm = "balanced"
+
+    # Thresholds by preset
+    if preset_norm == "strict":
+        long_rsi_min, long_rsi_max = 40.0, 50.0
+        short_rsi_min, short_rsi_max = 50.0, 60.0
+        vwap_eps = 0.0
+        vol_mult_req = 1.20
+        max_stop_pct = 0.01
+        require_rsi_momentum = True
+        require_volume = True
+    elif preset_norm == "aggressive":
+        long_rsi_min, long_rsi_max = 30.0, 60.0
+        short_rsi_min, short_rsi_max = 40.0, 70.0
+        vwap_eps = 0.002
+        vol_mult_req = 1.00
+        max_stop_pct = 0.03
+        require_rsi_momentum = False
+        require_volume = False
+    else:
+        long_rsi_min, long_rsi_max = 35.0, 55.0
+        short_rsi_min, short_rsi_max = 45.0, 65.0
+        vwap_eps = 0.001
+        vol_mult_req = 1.05
+        max_stop_pct = 0.02
+        require_rsi_momentum = True
+        require_volume = True
+
     # RSI pullback + turn
     if side == "LONG":
-        rsi_ok = 40 <= last_rsi <= 50 and last_rsi > prev_rsi
-        vwap_ok = entry > last_vwap
+        rsi_ok = long_rsi_min <= last_rsi <= long_rsi_max
+        rsi_momentum_ok = (last_rsi > prev_rsi) if require_rsi_momentum else True
+        vwap_ok = entry >= (last_vwap * (1.0 - vwap_eps))
         candle_ok = float(last["close"]) > float(last["open"])
     else:
-        rsi_ok = 50 <= last_rsi <= 60 and last_rsi < prev_rsi
-        vwap_ok = entry < last_vwap
+        rsi_ok = short_rsi_min <= last_rsi <= short_rsi_max
+        rsi_momentum_ok = (last_rsi < prev_rsi) if require_rsi_momentum else True
+        vwap_ok = entry <= (last_vwap * (1.0 + vwap_eps))
         candle_ok = float(last["close"]) < float(last["open"])
 
-    if not (rsi_ok and vwap_ok and candle_ok):
-        return None
+    if not enable_vwap:
+        vwap_ok = True
 
-    # Volume expansion
-    if avg_vol <= 0:
-        return None
-    volume_ok = last_vol >= avg_vol * 1.2
-    if not volume_ok:
-        return None
+    # Volume checks (evaluate even if RSI/VWAP fails so we can explain everything)
+    avg_vol_ok = avg_vol > 0
+    volume_ok = (last_vol >= avg_vol * vol_mult_req) if avg_vol_ok else False
 
-    # Risk management: SL beyond sweep level
+    # Volume can be disabled via preset (aggressive) or via custom rules.
+    effective_volume_ok = volume_ok if (require_volume and enable_volume) else True
+
+    if debug_out is not None:
+        debug_out["checks"].update(
+            {
+                "preset": preset_norm,
+                "rsi_ok": bool(rsi_ok),
+                "rsi_momentum_ok": bool(rsi_momentum_ok),
+                "vwap_ok": bool(vwap_ok),
+                "candle_ok": bool(candle_ok),
+                "avg_vol_ok": bool(avg_vol_ok),
+                "volume_ok": bool(volume_ok),
+                "effective_volume_ok": bool(effective_volume_ok),
+                "vol_mult_req": float(vol_mult_req),
+                "max_stop_pct": float(max_stop_pct),
+                "require_rsi_momentum": bool(require_rsi_momentum),
+                "require_volume": bool(require_volume and enable_volume),
+                "enable_vwap": bool(enable_vwap),
+                "enable_volume": bool(enable_volume),
+                "enable_stop_cap": bool(enable_stop_cap),
+            }
+        )
+
+    # Risk management: SL beyond sweep level (if present)
+    # If we didn't detect a sweep, fall back to a recent range stop.
+    # This makes the system more actionable while still enforcing max stop-width.
+    fallback_lookback = min(len(df_exec), 20)
+    recent_low = float(df_exec["low"].astype(float).iloc[-fallback_lookback:].min())
+    recent_high = float(df_exec["high"].astype(float).iloc[-fallback_lookback:].max())
+
     if side == "LONG":
-        stop = float(sweep_level) * 0.999  # small buffer
+        stop_ref = float(sweep_level) if sweep_level is not None else recent_low
+        stop = float(stop_ref) * 0.999  # small buffer
         risk = entry - stop
         if risk <= 0:
             return None
         take_profit = entry + 2.0 * risk
     else:
-        stop = float(sweep_level) * 1.001
+        stop_ref = float(sweep_level) if sweep_level is not None else recent_high
+        stop = float(stop_ref) * 1.001
         risk = stop - entry
         if risk <= 0:
             return None
         take_profit = entry - 2.0 * risk
 
+    risk_pct = (risk / entry) if entry != 0 else 1.0
+
     # Reject wide stop-loss relative to price (heuristic)
-    if (risk / entry) > 0.01:  # >1% stop on these intraday timeframes
+    if enable_stop_cap and risk_pct > max_stop_pct:
+        if debug_out is not None:
+            debug_out.update(
+                {
+                    "stop_loss": float(stop),
+                    "risk": float(risk),
+                    "risk_pct": float(risk_pct),
+                }
+            )
+            debug_out["checks"]["stop_width_ok"] = False
+        stop_width_ok = False
+    else:
+        stop_width_ok = True
+
+    if debug_out is not None:
+        debug_out.update(
+            {
+                "stop_loss": float(stop),
+                "risk": float(risk),
+                "risk_pct": float(risk_pct),
+            }
+        )
+        debug_out["checks"]["stop_width_ok"] = bool(stop_width_ok)
+
+    # Final decision
+    # Keep VWAP + stop width as core safety checks.
+    # RSI momentum and volume can be disabled in aggressive mode.
+    if not (rsi_ok and rsi_momentum_ok and vwap_ok and avg_vol_ok and effective_volume_ok and stop_width_ok):
         return None
 
     return {
@@ -512,12 +647,16 @@ def generate_institutional_signal(
     data_manager: Any,
     news_manager: Any,
     timeframe: Timeframe = "15m",
+    preset: str = "balanced",
+    rules: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     result, _debug = generate_institutional_signal_debug(
         symbol=symbol,
         data_manager=data_manager,
         news_manager=news_manager,
         timeframe=timeframe,
+        preset=preset,
+        rules=rules,
     )
     return result
 
@@ -529,6 +668,8 @@ def generate_institutional_signal_debug(
     news_manager: Any,
     timeframe: Timeframe = "15m",
     use_sentiment: bool = False,
+    preset: str = "balanced",
+    rules: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     # Fetch data
     # - HTF regime: 1h + 4h
@@ -540,9 +681,49 @@ def generate_institutional_signal_debug(
         "metrics": {},
     }
 
+    rules_in = rules or {}
+
+    def _rule_bool(key: str, default: bool) -> bool:
+        v = rules_in.get(key, default)
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, (int, float)):
+            return bool(v)
+        if isinstance(v, str):
+            return v.strip().lower() in {"1", "true", "yes", "y", "on"}
+        return default
+
+    # RSI is always enforced by user request.
+    enable_regime = _rule_bool("enable_regime", True)
+    enable_structure = _rule_bool("enable_structure", True)
+    enable_alignment = _rule_bool("enable_alignment", True)
+    enable_vwap = _rule_bool("enable_vwap", True)
+    enable_volume = _rule_bool("enable_volume", True)
+    enable_stop_cap = _rule_bool("enable_stop_cap", True)
+
+    rsi_only_mode = (not enable_regime) and (not enable_structure) and (not enable_alignment) and (not enable_vwap) and (not enable_volume) and (not enable_stop_cap)
+
+    debug["rules"] = {
+        "enable_regime": enable_regime,
+        "enable_structure": enable_structure,
+        "enable_alignment": enable_alignment,
+        "enable_vwap": enable_vwap,
+        "enable_volume": enable_volume,
+        "enable_stop_cap": enable_stop_cap,
+        "rsi_always_on": True,
+        "rsi_only_mode": rsi_only_mode,
+    }
+
     if data_manager is None or getattr(data_manager, "binance", None) is None:
         debug["gates"]["data"] = False
-        return {"signal": "NO_TRADE", "reason": "insufficient confluence"}, debug
+        return (
+            _no_trade_payload(
+                timeframe=timeframe,
+                failed_gate="data",
+                explain="Market data provider unavailable.",
+            ),
+            debug,
+        )
 
     interval_map = {
         "5m": "5m",
@@ -556,11 +737,25 @@ def generate_institutional_signal_debug(
 
     if df_1h is None or df_4h is None or df_exec is None:
         debug["gates"]["data"] = False
-        return {"signal": "NO_TRADE", "reason": "insufficient confluence"}, debug
+        return (
+            _no_trade_payload(
+                timeframe=timeframe,
+                failed_gate="data",
+                explain="Failed to fetch candles for one or more timeframes.",
+            ),
+            debug,
+        )
 
     if df_1h.empty or df_4h.empty or df_exec.empty:
         debug["gates"]["data"] = False
-        return {"signal": "NO_TRADE", "reason": "insufficient confluence"}, debug
+        return (
+            _no_trade_payload(
+                timeframe=timeframe,
+                failed_gate="data",
+                explain="Received empty candle data.",
+            ),
+            debug,
+        )
 
     debug["gates"]["data"] = True
 
@@ -578,14 +773,66 @@ def generate_institutional_signal_debug(
             "bias": regime.bias,
         }
     )
-    if regime.market_regime == "RANGE":
-        debug["gates"]["market_regime"] = False
-        return {"signal": "NO_TRADE", "reason": "insufficient confluence"}, debug
-    if regime.bias == "NEUTRAL":
-        debug["gates"]["market_regime"] = False
-        return {"signal": "NO_TRADE", "reason": "insufficient confluence"}, debug
+    if enable_regime:
+        if regime.market_regime == "RANGE":
+            debug["gates"]["market_regime"] = False
+            return (
+                _no_trade_payload(
+                    timeframe=timeframe,
+                    failed_gate="market_regime",
+                    explain="Higher timeframes are range-bound (ADX too low); waiting for trending conditions.",
+                    extra={
+                        "market_regime": regime.market_regime,
+                        "bias": regime.bias,
+                    },
+                ),
+                debug,
+            )
+        if regime.bias == "NEUTRAL":
+            debug["gates"]["market_regime"] = False
+            return (
+                _no_trade_payload(
+                    timeframe=timeframe,
+                    failed_gate="market_regime",
+                    explain="Higher timeframes do not agree on a clear directional bias.",
+                    extra={
+                        "market_regime": regime.market_regime,
+                        "bias": regime.bias,
+                    },
+                ),
+                debug,
+            )
 
-    debug["gates"]["market_regime"] = True
+        debug["gates"]["market_regime"] = True
+    else:
+        debug["gates"]["market_regime"] = "SKIPPED"
+
+        # RSI-only / relaxed mode: infer bias from execution RSI.
+        close_exec = df_exec["close"].astype(float)
+        exec_rsi_val = float(_rsi(close_exec, 14).iloc[-1])
+        debug["metrics"]["exec_rsi"] = exec_rsi_val
+        if exec_rsi_val >= 50.0:
+            regime = RegimeResult(
+                market_regime="TREND",
+                bias="SHORT",
+                adx_1h=regime.adx_1h,
+                adx_4h=regime.adx_4h,
+                ema200_1h=regime.ema200_1h,
+                ema200_4h=regime.ema200_4h,
+                price_1h=regime.price_1h,
+                price_4h=regime.price_4h,
+            )
+        else:
+            regime = RegimeResult(
+                market_regime="TREND",
+                bias="LONG",
+                adx_1h=regime.adx_1h,
+                adx_4h=regime.adx_4h,
+                ema200_1h=regime.ema200_1h,
+                ema200_4h=regime.ema200_4h,
+                price_1h=regime.price_1h,
+                price_4h=regime.price_4h,
+            )
 
     # Sentiment (optional for now)
     sent = SentimentResult(sentiment_score=0.0, rising=False, falling=False)
@@ -605,11 +852,35 @@ def generate_institutional_signal_debug(
         if regime.bias == "LONG":
             if not (sent.sentiment_score >= 0.6 and sent.rising):
                 debug["gates"]["sentiment"] = False
-                return {"signal": "NO_TRADE", "reason": "insufficient confluence"}, debug
+                return (
+                    _no_trade_payload(
+                        timeframe=timeframe,
+                        failed_gate="sentiment",
+                        explain="Sentiment gate rejected the setup for LONG bias.",
+                        extra={
+                            "bias": regime.bias,
+                            "sentiment_score": float(round(sent.sentiment_score, 4)),
+                            "sentiment_rising": bool(sent.rising),
+                        },
+                    ),
+                    debug,
+                )
         else:
             if not (sent.sentiment_score <= -0.6 and sent.falling):
                 debug["gates"]["sentiment"] = False
-                return {"signal": "NO_TRADE", "reason": "insufficient confluence"}, debug
+                return (
+                    _no_trade_payload(
+                        timeframe=timeframe,
+                        failed_gate="sentiment",
+                        explain="Sentiment gate rejected the setup for SHORT bias.",
+                        extra={
+                            "bias": regime.bias,
+                            "sentiment_score": float(round(sent.sentiment_score, 4)),
+                            "sentiment_falling": bool(sent.falling),
+                        },
+                    ),
+                    debug,
+                )
 
         debug["gates"]["sentiment"] = True
     else:
@@ -628,46 +899,194 @@ def generate_institutional_signal_debug(
             "sweep_side": struct.sweep_side,
         }
     )
-    # Practical mode: if we have a clean sweep + BOS, we don't hard-fail due to structure==UNCLEAR.
-    if (not struct.sweep) or (not struct.bos) or (struct.sweep_level is None):
-        debug["gates"]["structure"] = False
-        return {"signal": "NO_TRADE", "reason": "insufficient confluence"}, debug
+    warnings: List[str] = []
 
-    # Sweep direction must match bias:
-    # - LONG entries require taking liquidity below (LOW sweep)
-    # - SHORT entries require taking liquidity above (HIGH sweep)
-    if regime.bias == "LONG" and struct.sweep_side != "LOW":
-        debug["gates"]["structure"] = False
-        return {"signal": "NO_TRADE", "reason": "insufficient confluence"}, debug
-    if regime.bias == "SHORT" and struct.sweep_side != "HIGH":
-        debug["gates"]["structure"] = False
-        return {"signal": "NO_TRADE", "reason": "insufficient confluence"}, debug
+    # More actionable mode:
+    # - Prefer sweep + BOS.
+    # - If missing, allow BOS-only aligned with HTF bias.
+    # - If still missing, do NOT hard-fail; proceed with fallback stops and lower confidence.
+    fallback_bos = False
+    fallback_bos_level: Optional[float] = None
+    fallback_stop_ref: Optional[float] = None
 
-    if struct.structure == "UNCLEAR":
-        debug["gates"]["structure"] = "SOFT_PASS"
+    if not struct.bos:
+        highs = df_exec["high"].astype(float).values
+        lows = df_exec["low"].astype(float).values
+        closes = df_exec["close"].astype(float).values
+        pre_range_window = 10
+        if len(df_exec) > pre_range_window + 2:
+            pre_start = max(0, len(df_exec) - 1 - pre_range_window)
+            pre_high = float(np.max(highs[pre_start : len(df_exec) - 1]))
+            pre_low = float(np.min(lows[pre_start : len(df_exec) - 1]))
+            last_high = float(highs[-1])
+            last_low = float(lows[-1])
+            last_close = float(closes[-1])
+
+            if regime.bias == "LONG" and last_close > pre_high and last_high > pre_high:
+                fallback_bos = True
+                fallback_bos_level = pre_high
+            if regime.bias == "SHORT" and last_close < pre_low and last_low < pre_low:
+                fallback_bos = True
+                fallback_bos_level = pre_low
+
+    # Fallback stop reference from recent swings
+    if struct.sweep_level is None:
+        swing_highs, swing_lows = _find_swings(df_exec, 3, 3)
+        if regime.bias == "LONG" and len(swing_lows) >= 1:
+            fallback_stop_ref = float(df_exec["low"].astype(float).iloc[swing_lows[-1]])
+        if regime.bias == "SHORT" and len(swing_highs) >= 1:
+            fallback_stop_ref = float(df_exec["high"].astype(float).iloc[swing_highs[-1]])
+
+    has_structure = bool(struct.bos and struct.sweep) or bool(fallback_bos) or bool(struct.bos)
+    stop_ref = struct.sweep_level if struct.sweep_level is not None else fallback_stop_ref
+    if stop_ref is None:
+        # Last resort: use recent range stop reference.
+        fallback_lookback = min(len(df_exec), 20)
+        recent_low = float(df_exec["low"].astype(float).iloc[-fallback_lookback:].min())
+        recent_high = float(df_exec["high"].astype(float).iloc[-fallback_lookback:].max())
+        stop_ref = recent_low if regime.bias == "LONG" else recent_high
+
+    debug["metrics"].update(
+        {
+            "fallback_bos": bool(fallback_bos),
+            "fallback_bos_level": fallback_bos_level,
+            "fallback_stop_ref": stop_ref,
+        }
+    )
+
+    if not has_structure:
+        debug["gates"]["structure"] = False
+        warnings.append("Structure confirmation missing (no sweep/BOS). Using fallback stop reference.")
     else:
         debug["gates"]["structure"] = True
 
-    # Directional alignment between regime bias and structure
-    if struct.structure != "UNCLEAR" and regime.bias == "LONG" and struct.structure != "BULLISH":
-        debug["gates"]["alignment"] = False
-        return {"signal": "NO_TRADE", "reason": "insufficient confluence"}, debug
-    if struct.structure != "UNCLEAR" and regime.bias == "SHORT" and struct.structure != "BEARISH":
-        debug["gates"]["alignment"] = False
-        return {"signal": "NO_TRADE", "reason": "insufficient confluence"}, debug
+    # If we do have a sweep, enforce sweep direction matches bias.
+    # If we're using BOS-only fallback, we skip this check.
+    if enable_structure and struct.sweep:
+        # - LONG entries require taking liquidity below (LOW sweep)
+        # - SHORT entries require taking liquidity above (HIGH sweep)
+        if regime.bias == "LONG" and struct.sweep_side != "LOW":
+            debug["gates"]["structure"] = False
+            return (
+                _no_trade_payload(
+                    timeframe=timeframe,
+                    failed_gate="structure",
+                    explain="Sweep direction does not match LONG bias (expected LOW sweep).",
+                    extra={
+                        "bias": regime.bias,
+                        "sweep_side": struct.sweep_side,
+                    },
+                ),
+                debug,
+            )
+        if regime.bias == "SHORT" and struct.sweep_side != "HIGH":
+            debug["gates"]["structure"] = False
+            return (
+                _no_trade_payload(
+                    timeframe=timeframe,
+                    failed_gate="structure",
+                    explain="Sweep direction does not match SHORT bias (expected HIGH sweep).",
+                    extra={
+                        "bias": regime.bias,
+                        "sweep_side": struct.sweep_side,
+                    },
+                ),
+                debug,
+            )
 
-    debug["gates"]["alignment"] = True
+    if struct.structure == "UNCLEAR":
+        debug["gates"]["structure_state"] = "UNCLEAR"
+        warnings.append("Structure state is UNCLEAR.")
+    else:
+        debug["gates"]["structure_state"] = struct.structure
+
+    # Directional alignment between regime bias and structure
+    if enable_alignment:
+        if struct.structure != "UNCLEAR" and regime.bias == "LONG" and struct.structure != "BULLISH":
+            debug["gates"]["alignment"] = False
+            return (
+                _no_trade_payload(
+                    timeframe=timeframe,
+                    failed_gate="alignment",
+                    explain="Structure direction does not align with LONG bias.",
+                    extra={
+                        "bias": regime.bias,
+                        "structure": struct.structure,
+                    },
+                ),
+                debug,
+            )
+        if struct.structure != "UNCLEAR" and regime.bias == "SHORT" and struct.structure != "BEARISH":
+            debug["gates"]["alignment"] = False
+            return (
+                _no_trade_payload(
+                    timeframe=timeframe,
+                    failed_gate="alignment",
+                    explain="Structure direction does not align with SHORT bias.",
+                    extra={
+                        "bias": regime.bias,
+                        "structure": struct.structure,
+                    },
+                ),
+                debug,
+            )
+
+        debug["gates"]["alignment"] = True
+    else:
+        debug["gates"]["alignment"] = "SKIPPED"
 
     # Entry + risk
+    entry_debug: Dict[str, Any] = {}
     entry = compute_entry_and_risk(
         df_exec=df_exec,
         side=regime.bias,
-        sweep_level=struct.sweep_level,
+        sweep_level=stop_ref,
         timeframe=timeframe,
+        debug_out=entry_debug,
+        preset=preset,
+        rules={
+            "enable_vwap": enable_vwap,
+            "enable_volume": enable_volume,
+            "enable_stop_cap": enable_stop_cap,
+            "rsi_only_mode": rsi_only_mode,
+        },
     )
     if entry is None:
         debug["gates"]["entry"] = False
-        return {"signal": "NO_TRADE", "reason": "insufficient confluence"}, debug
+
+        failed = []
+        checks = (entry_debug.get("checks") or {}) if isinstance(entry_debug, dict) else {}
+        enable_volume = bool(checks.get("enable_volume", True))
+        enable_vwap = bool(checks.get("enable_vwap", True))
+        enable_stop_cap = bool(checks.get("enable_stop_cap", True))
+        if checks.get("rsi_ok") is False:
+            failed.append("RSI condition not met")
+        if enable_vwap and checks.get("vwap_ok") is False:
+            failed.append("VWAP condition not met")
+        if enable_volume and checks.get("effective_volume_ok") is False:
+            if checks.get("avg_vol_ok") is False:
+                failed.append("Not enough volume history to evaluate")
+            if checks.get("volume_ok") is False:
+                failed.append("Volume not expanded enough")
+        if enable_stop_cap and checks.get("stop_width_ok") is False:
+            failed.append("Stop too wide vs entry")
+
+        explain_lines = failed if failed else [
+            "Entry trigger and/or risk rules rejected the setup (e.g. volume, VWAP/RSI pullback, or stop too wide)."
+        ]
+
+        return (
+            _no_trade_payload(
+                timeframe=timeframe,
+                failed_gate="entry",
+                explain=explain_lines[0],
+                extra={
+                    "explain": explain_lines,
+                    "entry_debug": entry_debug,
+                },
+            ),
+            debug,
+        )
 
     debug["gates"]["entry"] = True
 
@@ -686,6 +1105,31 @@ def generate_institutional_signal_debug(
         "volume_divergence",
     ]
 
+    # Risk label + warnings based on disabled rules
+    risk_warnings: List[str] = []
+    disabled = []
+    if not enable_regime:
+        disabled.append("market_regime")
+    if not enable_structure:
+        disabled.append("structure")
+    if not enable_alignment:
+        disabled.append("alignment")
+    if not enable_vwap:
+        disabled.append("vwap")
+    if not enable_volume:
+        disabled.append("volume")
+    if not enable_stop_cap:
+        disabled.append("stop_cap")
+
+    if disabled:
+        risk_warnings.append("HIGH RISK: disabled filters: " + ", ".join(disabled))
+
+    risk_level: Literal["LOW", "MEDIUM", "HIGH"] = "LOW"
+    if len(disabled) >= 3:
+        risk_level = "HIGH"
+    elif len(disabled) >= 1:
+        risk_level = "MEDIUM"
+
     # Confidence heuristic: keep conservative (0-100)
     # - sentiment magnitude (0-50)
     # - ADX strength (0-30)
@@ -700,12 +1144,19 @@ def generate_institutional_signal_debug(
 
     confidence_score = int(round(min(100.0, sent_strength + adx_strength + vol_bonus)))
 
+    # Penalize confidence if structure confirmation is missing.
+    if not has_structure:
+        confidence_score = int(max(5, round(confidence_score * 0.55)))
+
     return {
         "signal": regime.bias,
         "confidence_score": confidence_score,
+        "risk_level": risk_level,
+        "risk_warnings": risk_warnings,
         "market_regime": regime.market_regime,
         "sentiment_score": float(round(sent.sentiment_score, 4)),
         "structure": struct.structure,
+        "warnings": warnings,
         "entry_reason": entry_reason,
         "entry_price": entry["entry_price"],
         "stop_loss": entry["stop_loss"],

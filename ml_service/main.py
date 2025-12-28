@@ -127,6 +127,18 @@ class InstitutionalSignalRequest(BaseModel):
     symbol: str = Field(..., description="Trading symbol (e.g., BTCUSDT)")
     timeframe: Optional[str] = Field("15m", description="Execution timeframe: 5m, 15m, or 1h")
     use_sentiment: Optional[bool] = Field(False, description="Enable strict news sentiment gating")
+    preset: Optional[str] = Field(
+        "balanced",
+        description="Rule strictness preset: strict, balanced, or aggressive",
+    )
+    rules: Optional[dict] = Field(
+        None,
+        description="Optional rule toggles for demo/customization (e.g. enable_vwap=false). RSI is always enforced.",
+    )
+
+
+class InstitutionalProofRequest(BaseModel):
+    signal: dict = Field(..., description="Institutional signal payload to anchor on-chain")
 
 # In-memory signal storage (optional, for listing)
 signals_cache = []
@@ -195,6 +207,8 @@ async def institutional_signal(request: InstitutionalSignalRequest):
         if timeframe not in {"5m", "15m", "1h"}:
             raise HTTPException(status_code=400, detail="Invalid timeframe. Use 5m, 15m, or 1h.")
 
+        preset = (request.preset or "balanced").strip().lower()
+
         data_manager = get_crypto_data_manager()
         if request.use_sentiment:
             result, _debug = generate_institutional_signal_debug(
@@ -203,6 +217,8 @@ async def institutional_signal(request: InstitutionalSignalRequest):
                 news_manager=news_manager,
                 timeframe=timeframe,
                 use_sentiment=True,
+                preset=preset,
+                rules=request.rules,
             )
         else:
             result = generate_institutional_signal(
@@ -210,6 +226,8 @@ async def institutional_signal(request: InstitutionalSignalRequest):
                 data_manager=data_manager,
                 news_manager=news_manager,
                 timeframe=timeframe,
+                preset=preset,
+                rules=request.rules,
             )
 
         # Strict output requirement: only JSON (FastAPI returns dict as JSON)
@@ -229,6 +247,8 @@ async def institutional_signal_debug(request: InstitutionalSignalRequest):
         if timeframe not in {"5m", "15m", "1h"}:
             raise HTTPException(status_code=400, detail="Invalid timeframe. Use 5m, 15m, or 1h.")
 
+        preset = (request.preset or "balanced").strip().lower()
+
         data_manager = get_crypto_data_manager()
         result, debug = generate_institutional_signal_debug(
             symbol=request.symbol,
@@ -236,6 +256,8 @@ async def institutional_signal_debug(request: InstitutionalSignalRequest):
             news_manager=news_manager,
             timeframe=timeframe,
             use_sentiment=bool(request.use_sentiment),
+            preset=preset,
+            rules=request.rules,
         )
 
         return {"result": result, "debug": debug}
@@ -247,6 +269,16 @@ async def institutional_signal_debug(request: InstitutionalSignalRequest):
             "result": {"signal": "NO_TRADE", "reason": "insufficient confluence"},
             "debug": {"error": str(e)},
         }
+
+
+@app.post("/signal/institutional/proof")
+async def institutional_signal_proof(request: InstitutionalProofRequest):
+    try:
+        solana_result = send_proof(request.signal)
+        return solana_result
+    except Exception as e:
+        logger.error(f"Error publishing institutional proof to Solana: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Technical indicators endpoint (no database saving)
 @app.post("/technical", response_model=TechnicalResponse)

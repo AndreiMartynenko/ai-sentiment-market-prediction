@@ -87,6 +87,22 @@ type StoredSignalNotification = {
   createdAt: string
 }
 
+type AnalyzedTrade = {
+  symbol: string
+  timeframe: string
+  side: TradeSide
+  confidence: number
+  reasons: string[]
+  price: number
+  entryPrice: number
+  takeProfit: number
+  stopLoss: number
+  stopDistancePct: number
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH'
+  riskNotes: string[]
+  analyzedAt: string
+}
+
 type TradingViewWidgetProps = {
   symbol: string
 }
@@ -324,6 +340,137 @@ export default function TradingDashboardPage(): React.JSX.Element {
   const [activeSignal, setActiveSignal] = useState<StoredSignalNotification | null>(null)
   const [signalToastVisible, setSignalToastVisible] = useState(false)
 
+  const showLegacyDemo = true
+  const showHeuristicTradeSignal = true
+
+  const [analyzedTrade, setAnalyzedTrade] = useState<AnalyzedTrade | null>(null)
+  const [analyzeLoading, setAnalyzeLoading] = useState(false)
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null)
+
+  const [proofLoading, setProofLoading] = useState(false)
+  const [proofError, setProofError] = useState<string | null>(null)
+  const [proofResult, setProofResult] = useState<any | null>(null)
+
+  const handleAnalyzeTrade = async () => {
+    if (!indicators) {
+      setAnalyzeError('Indicators not loaded yet.')
+      return
+    }
+
+    setAnalyzeLoading(true)
+    setAnalyzeError(null)
+    setProofError(null)
+    setProofResult(null)
+    try {
+      const trade = computeTradeSignal(indicators, sentimentOverallLabel, sentimentAvg)
+
+      const priceRes = await fetch(`/api/price?symbol=${encodeURIComponent(selectedSymbol)}`, {
+        cache: 'no-store',
+      })
+      if (!priceRes.ok) {
+        const t = await priceRes.text()
+        throw new Error(t || `Price status ${priceRes.status}`)
+      }
+      const priceData = await priceRes.json()
+      const price = Number(priceData?.price)
+      if (!Number.isFinite(price) || price <= 0) throw new Error('Invalid price')
+
+      let entryPrice = price
+      let takeProfit = price
+      let stopLoss = price
+      if (trade.side === 'BUY') {
+        entryPrice = price * 0.995
+        takeProfit = price * 1.02
+        stopLoss = price * 0.985
+      } else if (trade.side === 'SHORT') {
+        entryPrice = price * 1.005
+        takeProfit = price * 0.98
+        stopLoss = price * 1.015
+      }
+
+      const stopDistancePct = entryPrice > 0 ? Math.abs(entryPrice - stopLoss) / entryPrice : 0
+
+      let riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW'
+      const riskNotes: string[] = []
+
+      if (trade.side === 'HOLD') {
+        riskLevel = 'HIGH'
+        riskNotes.push('No trade recommended (HOLD). Any entry is speculative.')
+      }
+
+      if (trade.confidence < 0.55) {
+        riskLevel = 'HIGH'
+        riskNotes.push('Low confidence: weak confluence between indicators/sentiment.')
+      } else if (trade.confidence < 0.7 && riskLevel !== 'HIGH') {
+        riskLevel = 'MEDIUM'
+        riskNotes.push('Medium confidence: consider smaller position size.')
+      }
+
+      if (stopDistancePct > 0.03) {
+        riskLevel = 'HIGH'
+        riskNotes.push(`Wide stop-loss: ${(stopDistancePct * 100).toFixed(2)}% from entry.`)
+      } else if (stopDistancePct > 0.02 && riskLevel === 'LOW') {
+        riskLevel = 'MEDIUM'
+        riskNotes.push(`Stop-loss distance: ${(stopDistancePct * 100).toFixed(2)}% from entry.`)
+      }
+
+      if (riskNotes.length === 0) {
+        riskNotes.push('Risk looks reasonable for this setup, but always use position sizing.')
+      }
+
+      setAnalyzedTrade({
+        symbol: selectedSymbol,
+        timeframe: 'multi-timeframe',
+        side: trade.side,
+        confidence: trade.confidence,
+        reasons: trade.reasons,
+        price,
+        entryPrice,
+        takeProfit,
+        stopLoss,
+        stopDistancePct,
+        riskLevel,
+        riskNotes,
+        analyzedAt: new Date().toISOString(),
+      })
+    } catch (e: any) {
+      const msg = typeof e?.message === 'string' ? e.message : String(e)
+      setAnalyzeError(msg || 'Failed to analyze trade.')
+      setAnalyzedTrade(null)
+    } finally {
+      setAnalyzeLoading(false)
+    }
+  }
+
+  const handlePublishAnalyzedProof = async () => {
+    if (!analyzedTrade) {
+      setProofError('Analyze a trade first.')
+      return
+    }
+    setProofLoading(true)
+    setProofError(null)
+    setProofResult(null)
+    try {
+      const res = await fetch('/api/institutional/proof', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signal: analyzedTrade }),
+        cache: 'no-store',
+      })
+      if (!res.ok) {
+        const t = await res.text()
+        throw new Error(t || `Status ${res.status}`)
+      }
+      const data = await res.json()
+      setProofResult(data)
+    } catch (e: any) {
+      const msg = typeof e?.message === 'string' ? e.message : String(e)
+      setProofError(msg || 'Failed to publish proof.')
+    } finally {
+      setProofLoading(false)
+    }
+  }
+
   const sentimentNews =
     newsSentimentEnabled && news.length > 0
       ? news.filter((n) => typeof n.sentimentScore === 'number' && !Number.isNaN(n.sentimentScore))
@@ -392,20 +539,7 @@ export default function TradingDashboardPage(): React.JSX.Element {
 
   // 1b) Load latest stored notification (if any) so user sees it even if it was generated earlier
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      const raw = window.localStorage.getItem(NOTIFICATION_STORAGE_KEY)
-      if (!raw) return
-
-      const stored: StoredSignalNotification[] = JSON.parse(raw)
-      if (!Array.isArray(stored) || stored.length === 0) return
-
-      const latest = stored[0]
-      setActiveSignal(latest)
-      setSignalToastVisible(true)
-    } catch (e) {
-      console.error('load stored notifications error', e)
-    }
+    return
   }, [])
 
   // 2) News loader
@@ -470,19 +604,15 @@ export default function TradingDashboardPage(): React.JSX.Element {
         const data = await res.json()
         const markets: { pair: string; price: number }[] = data.markets || []
 
-        // Only look at first 10 entries for now
         for (const m of markets.slice(0, 10)) {
           if (cancelled) return
 
           const symbol = m.pair
-
           try {
             const indRes = await fetch(`/api/indicators?symbol=${encodeURIComponent(symbol)}`)
             if (!indRes.ok) continue
 
             const indData = (await indRes.json()) as IndicatorsData
-
-            // Use neutral sentiment for background scan; dashboard view still uses real sentiment
             const trade = computeTradeSignal(indData, 'Neutral', 0)
 
             const isStrong = trade.side !== 'HOLD' && trade.confidence >= 0.8
@@ -505,8 +635,6 @@ export default function TradingDashboardPage(): React.JSX.Element {
               stopLoss = price * 1.015
             }
 
-            if (cancelled) return
-
             const storedSignal: StoredSignalNotification = {
               symbol,
               pair: symbol.replace('USDT', '/USDT'),
@@ -518,6 +646,7 @@ export default function TradingDashboardPage(): React.JSX.Element {
               createdAt: new Date().toISOString(),
             }
 
+            if (cancelled) return
             setActiveSignal(storedSignal)
             persistSignalNotification(storedSignal)
             setSignalToastVisible(true)
@@ -532,7 +661,7 @@ export default function TradingDashboardPage(): React.JSX.Element {
     }
 
     scanTopMarkets()
-    intervalId = window.setInterval(scanTopMarkets, 180000) // ~3 minutes
+    intervalId = window.setInterval(scanTopMarkets, 180000)
 
     return () => {
       cancelled = true
@@ -693,123 +822,161 @@ export default function TradingDashboardPage(): React.JSX.Element {
           </div>
           <TradingViewWidget symbol={selectedSymbol} />
 
-          {/* AI Trade Signal + Average RSI side by side */}
-          {indicators && (
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              {/* AI Trade Signal */}
-              {(() => {
-                const trade = computeTradeSignal(
-                  indicators,
-                  sentimentOverallLabel,
-                  sentimentAvg,
-                )
-                const confidencePct = Math.round(trade.confidence * 100)
+          <div className="mt-4 rounded-2xl border border-gray-900 bg-gray-950/80 p-4 text-xs">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-100">Analyze Trade</h2>
+                <p className="text-[11px] text-gray-500">
+                  Generate a combined signal card (plan + reasons). Optionally publish a mock Solana proof.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleAnalyzeTrade}
+                  disabled={analyzeLoading || !indicators}
+                  className={
+                    'rounded-md px-3 py-1 text-[11px] font-semibold ' +
+                    (analyzeLoading || !indicators
+                      ? 'cursor-not-allowed bg-gray-800 text-gray-400'
+                      : 'bg-emerald-500 text-gray-950 hover:bg-emerald-400')
+                  }
+                >
+                  {analyzeLoading ? 'Analyzing…' : 'Analyze Trade'}
+                </button>
+              </div>
+            </div>
 
-                let chipClasses =
-                  'inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold '
-                if (trade.side === 'BUY') {
-                  chipClasses +=
-                    'border-emerald-500/60 bg-emerald-500/10 text-emerald-300'
-                } else if (trade.side === 'SHORT') {
-                  chipClasses +=
-                    'border-red-500/60 bg-red-500/10 text-red-300'
-                } else {
-                  chipClasses +=
-                    'border-gray-700 bg-gray-900 text-gray-300'
-                }
+            {analyzeError && <div className="text-[11px] text-red-300">{analyzeError}</div>}
 
-                const isActiveForSymbol =
-                  activeSignal && activeSignal.symbol === indicators.symbol
+            {analyzedTrade && (
+              <div className="mt-2 rounded-lg border border-gray-900 bg-gray-950/60 p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[11px] font-semibold text-gray-100">
+                      {analyzedTrade.symbol.replace('USDT', '/USDT')}
+                    </div>
+                    <div className="text-[10px] text-gray-500">
+                      Analyzed {formatShortTime(analyzedTrade.analyzedAt)} (UTC)
+                    </div>
+                  </div>
+                  <span className="rounded-full border border-gray-700 bg-gray-900 px-3 py-1 text-xs font-semibold text-gray-200">
+                    {analyzedTrade.side}
+                  </span>
+                </div>
 
-                return (
+                <div className="mb-2 flex items-center justify-between text-[11px] text-gray-400">
+                  <span>Confidence</span>
+                  <span>{Math.round(analyzedTrade.confidence * 100)}%</span>
+                </div>
+                <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-gray-900">
                   <div
-                    id="ai-trade-signal-card"
-                    className="rounded-2xl border border-gray-900 bg-gray-950/80 p-4 text-xs"
-                  >
-                    <div className="mb-3 flex items-center justify-between gap-3">
+                    className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-300"
+                    style={{ width: `${Math.round(analyzedTrade.confidence * 100)}%` }}
+                  />
+                </div>
+
+                {analyzedTrade.side !== 'HOLD' && (
+                  <div className="mb-3 rounded-lg border border-emerald-700/70 bg-emerald-500/5 px-3 py-2 text-[11px] text-gray-100">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-semibold">Suggested plan</span>
+                      <span className="font-mono text-[10px] text-emerald-300">on-demand</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-[11px]">
                       <div>
-                        <h2 className="text-sm font-semibold text-gray-100">
-                          AI Trade Signal
-                        </h2>
-                        <p className="text-[11px] text-gray-500">
-                          Combined view of multi-timeframe indicators and news sentiment.
-                        </p>
-                        {indicatorsUpdatedAt && (
-                          <p className="mt-0.5 text-[10px] text-gray-500">
-                            Updated {formatShortTime(indicatorsUpdatedAt)} (UTC)
-                          </p>
-                        )}
+                        <div className="text-[10px] text-gray-400">Entry</div>
+                        <div className="font-mono text-xs">{analyzedTrade.entryPrice.toFixed(4)}</div>
                       </div>
-                      <span className={chipClasses}>{trade.side}</span>
-                    </div>
-
-                    <div className="mb-2 flex items-center justify-between text-[11px] text-gray-400">
-                      <span>Confidence</span>
-                      <span>{confidencePct}%</span>
-                    </div>
-                    <div className="mb-3 h-1.5 w-full overflow-hidden rounded-full bg-gray-900">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-300"
-                        style={{ width: `${confidencePct}%` }}
-                      />
-                    </div>
-
-                    {isActiveForSymbol && activeSignal && (
-                      <div className="mb-3 rounded-lg border border-emerald-700/70 bg-emerald-500/5 px-3 py-2 text-[11px] text-gray-100">
-                        <div className="mb-1 flex items-center justify-between">
-                          <span className="font-semibold">Suggested plan</span>
-                          <span className="font-mono text-[10px] text-emerald-300">
-                            from background scan
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2 text-[11px]">
-                          <div>
-                            <div className="text-[10px] text-gray-400">Entry</div>
-                            <div className="font-mono text-xs">
-                              {activeSignal.entryPrice.toFixed(4)}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[10px] text-gray-400">Take profit</div>
-                            <div className="font-mono text-xs text-emerald-300">
-                              {activeSignal.takeProfit.toFixed(4)}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[10px] text-gray-400">Stop loss</div>
-                            <div className="font-mono text-xs text-red-300">
-                              {activeSignal.stopLoss.toFixed(4)}
-                            </div>
-                          </div>
-                        </div>
+                      <div>
+                        <div className="text-[10px] text-gray-400">Take profit</div>
+                        <div className="font-mono text-xs text-emerald-300">{analyzedTrade.takeProfit.toFixed(4)}</div>
                       </div>
-                    )}
-
-                    {/* Solana Proof (mocked for now) */}
-                    <div className="mb-3 rounded-lg border border-purple-700/70 bg-purple-500/5 px-3 py-2 text-[11px] text-gray-100">
-                      <div className="mb-1 flex items-center justify-between">
-                        <span className="font-semibold">Solana Proof</span>
-                        <span className="font-mono text-[10px] text-purple-300">
-                          devnet (mock)
-                        </span>
+                      <div>
+                        <div className="text-[10px] text-gray-400">Stop loss</div>
+                        <div className="font-mono text-xs text-red-300">{analyzedTrade.stopLoss.toFixed(4)}</div>
                       </div>
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[10px] text-gray-400">Status</span>
-                          <span className="rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-medium text-purple-200">
-                            Verified on Solana (mock)
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[10px] text-gray-400">Proof hash</span>
-                          <span className="font-mono text-[10px] text-gray-200">
-                            abcd...1234
-                          </span>
-                        </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mb-3 rounded-lg border border-gray-900 bg-gray-950/60 p-3 text-[11px]">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="font-semibold text-gray-100">Risk</span>
+                    <span
+                      className={
+                        'rounded-full px-2 py-0.5 text-[10px] font-semibold ' +
+                        (analyzedTrade.riskLevel === 'LOW'
+                          ? 'bg-emerald-500/10 text-emerald-300'
+                          : analyzedTrade.riskLevel === 'MEDIUM'
+                          ? 'bg-amber-500/10 text-amber-200'
+                          : 'bg-red-500/10 text-red-300')
+                      }
+                    >
+                      {analyzedTrade.riskLevel}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] text-gray-500">
+                    <span>Stop distance</span>
+                    <span className="font-mono text-gray-300">
+                      {(analyzedTrade.stopDistancePct * 100).toFixed(2)}%
+                    </span>
+                  </div>
+                  <ul className="mt-2 space-y-1 text-[11px] text-gray-400">
+                    {analyzedTrade.riskNotes.map((note, idx) => (
+                      <li key={idx} className="flex gap-1.5">
+                        <span className="mt-[3px] h-1 w-1 shrink-0 rounded-full bg-gray-500" />
+                        <span>{note}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <ul className="space-y-1 text-[11px] text-gray-400">
+                  {analyzedTrade.reasons.map((reason, idx) => (
+                    <li key={idx} className="flex gap-1.5">
+                      <span className="mt-[3px] h-1 w-1 shrink-0 rounded-full bg-gray-500" />
+                      <span>{reason}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handlePublishAnalyzedProof}
+                    disabled={proofLoading}
+                    className={
+                      'rounded-md px-3 py-1 text-[11px] font-semibold ' +
+                      (proofLoading
+                        ? 'cursor-not-allowed bg-gray-800 text-gray-400'
+                        : 'bg-purple-500 text-gray-950 hover:bg-purple-400')
+                    }
+                  >
+                    {proofLoading ? 'Sending…' : 'Send to Solana (mock)'}
+                  </button>
+                  {proofError && <span className="text-[11px] text-red-300">{proofError}</span>}
+                </div>
+
+                {proofResult && (
+                  <div className="mt-2 rounded-lg border border-purple-700/40 bg-purple-500/5 p-3 text-[11px] text-gray-100">
+                    <div className="mb-1 flex items-center justify-between">
+                      <span className="font-semibold">Solana Proof</span>
+                      <span className="font-mono text-[10px] text-purple-300">mock</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] text-gray-400">Proof hash</span>
+                        <span className="font-mono text-[10px] text-gray-200">{proofResult.proof_hash || '—'}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] text-gray-400">Tx signature</span>
+                        <span className="font-mono text-[10px] text-gray-200">{proofResult.tx_signature || '—'}</span>
+                      </div>
+                      {typeof proofResult.tx_signature === 'string' && proofResult.tx_signature && (
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[10px] text-gray-400">Explorer</span>
                           <a
-                            href="https://solscan.io/tx/EXAMPLE_TX_SIGNATURE?cluster=devnet"
+                            href={`https://solscan.io/tx/${proofResult.tx_signature}?cluster=devnet`}
                             target="_blank"
                             rel="noreferrer"
                             className="text-[10px] text-purple-300 underline hover:text-purple-200"
@@ -817,22 +984,17 @@ export default function TradingDashboardPage(): React.JSX.Element {
                             View on Solscan (mock)
                           </a>
                         </div>
-                      </div>
+                      )}
                     </div>
-
-                    <ul className="space-y-1 text-[11px] text-gray-400">
-                      {trade.reasons.map((reason, idx) => (
-                        <li key={idx} className="flex gap-1.5">
-                          <span className="mt-[3px] h-1 w-1 shrink-0 rounded-full bg-gray-500" />
-                          <span>{reason}</span>
-                        </li>
-                      ))}
-                    </ul>
                   </div>
-                )
-              })()}
+                )}
+              </div>
+            )}
+          </div>
 
-              {/* Average RSI overview */}
+          {/* Average RSI overview */}
+          {indicators && (
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
               {(() => {
             const { value, label } = computeRsiOverview(indicators)
             const rsiRounded = value.toFixed(1)
@@ -901,7 +1063,6 @@ export default function TradingDashboardPage(): React.JSX.Element {
               </div>
             )
           })()}
-
             </div>
           )}
 
