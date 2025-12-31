@@ -92,6 +92,11 @@ export default function MarketPage() {
 
     async function checkAuth() {
       try {
+        if (!supabase) {
+          if (isMounted) setIsAuthenticated(false)
+          return
+        }
+
         const { data } = await supabase.auth.getUser()
         if (!isMounted) return
         setIsAuthenticated(!!data?.user)

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 
 const GO_BACKEND_URL = process.env.GO_BACKEND_URL || 'http://localhost:8080'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: Request) {
   try {
     const body = await req.json()

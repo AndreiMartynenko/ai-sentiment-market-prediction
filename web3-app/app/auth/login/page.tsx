@@ -18,6 +18,11 @@ export default function LoginPage(): React.JSX.Element {
     setLoading(true)
 
     try {
+      if (!supabase) {
+        setError("Authentication is not configured yet.")
+        return
+      }
+
       const normalizedEmail = email.trim().toLowerCase()
 
       const { error: signInError } = await supabase.auth.signInWithPassword({

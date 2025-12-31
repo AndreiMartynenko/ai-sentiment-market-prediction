@@ -18,6 +18,10 @@ export default function SignupPage(): React.JSX.Element {
 
     async function redirectIfAuthenticated() {
       try {
+        if (!supabase) {
+          return
+        }
+
         const { data } = await supabase.auth.getUser()
         if (!cancelled && data?.user) {
           router.replace("/dashboard")
@@ -40,6 +44,11 @@ export default function SignupPage(): React.JSX.Element {
     setLoading(true)
 
     try {
+      if (!supabase) {
+        setError("Authentication is not configured yet.")
+        return
+      }
+
       const normalizedEmail = email.trim().toLowerCase()
 
       const { error: signUpError } = await supabase.auth.signUp({

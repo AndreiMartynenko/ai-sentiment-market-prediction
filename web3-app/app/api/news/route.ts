@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 const NEWS_API_KEY = process.env.NEWS_API_KEY
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000'
 
+export const dynamic = 'force-dynamic'
+
 // Only compute detailed sentiment for a curated set of majors.
 const TOP_SENTIMENT_BASES = new Set([
   'BTC',

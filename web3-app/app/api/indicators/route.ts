@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 
 const GO_BACKEND_URL = process.env.GO_BACKEND_URL || 'http://localhost:8080'
 
+export const dynamic = 'force-dynamic'
+
 type Timeframe = '5m' | '15m' | '1h' | '4h' | '1d'
 
 type IndicatorSummary = {

@@ -4,6 +4,8 @@ import { NextResponse } from 'next/server'
 const BINANCE_BASE = 'https://api.binance.com'
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT'] as const
 
+export const dynamic = 'force-dynamic'
+
 type SymbolInfo = {
   symbol: string
   coin: string

@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 const TWELVEDATA_API_KEY = process.env.TWELVEDATA_API_KEY
 const API_NINJAS_API_KEY = process.env.API_NINJAS_API_KEY
 
+export const dynamic = 'force-dynamic'
+
 // Session-scoped baseline prices for indices to compute recent percent change
 const ninjasIndexBaselines = new Map<string, number>()
 

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 
 const BINANCE_BASE = 'https://api.binance.com'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const res = await fetch(`${BINANCE_BASE}/api/v3/ticker/24hr`, {

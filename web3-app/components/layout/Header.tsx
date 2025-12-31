@@ -15,10 +15,20 @@ export function Header() {
 
   useEffect(() => {
     let isMounted = true
+    const sb = supabase
+    if (!sb) {
+      setCurrentUser(null)
+      setUserLoading(false)
+      return () => {
+        isMounted = false
+      }
+    }
+
+    const client = sb as NonNullable<typeof sb>
 
     async function loadUser() {
       try {
-        const { data, error } = await supabase.auth.getUser()
+        const { data, error } = await client.auth.getUser()
         if (!isMounted) return
         if (!error && data?.user) {
           setCurrentUser(data.user)
@@ -34,11 +44,11 @@ export function Header() {
 
     loadUser()
 
-     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-       if (!isMounted) return
-       setCurrentUser(session?.user ?? null)
-       setUserLoading(false)
-     })
+    const { data: authListener } = client.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return
+      setCurrentUser(session?.user ?? null)
+      setUserLoading(false)
+    })
 
     return () => {
       isMounted = false
@@ -48,7 +58,9 @@ export function Header() {
 
   const handleSignOut = async () => {
     try {
-      await supabase.auth.signOut()
+      if (supabase) {
+        await supabase.auth.signOut()
+      }
     } catch {
       // ignore error, best-effort logout
     } finally {
