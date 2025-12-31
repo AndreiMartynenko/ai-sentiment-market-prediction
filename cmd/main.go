@@ -42,19 +42,21 @@ func main() {
 	router := gin.Default()
 
 	// Start 24/7 institutional signal runner (in-memory)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	var runner *services.InstitutionalSignalRunner
+	if os.Getenv("ENABLE_INSTITUTIONAL_RUNNER") == "true" {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	// Best-effort graceful shutdown signal handling
-	shutdownCh := make(chan os.Signal, 1)
-	signal.Notify(shutdownCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-shutdownCh
-		cancel()
-	}()
+		shutdownCh := make(chan os.Signal, 1)
+		signal.Notify(shutdownCh, syscall.SIGINT, syscall.SIGTERM)
+		go func() {
+			<-shutdownCh
+			cancel()
+		}()
 
-	runner := services.NewInstitutionalSignalRunner(cfg.MLServiceURL)
-	go runner.Run(ctx)
+		runner = services.NewInstitutionalSignalRunner(cfg.MLServiceURL)
+		go runner.Run(ctx)
+	}
 
 	// Setup API routes
 	api.SetupRoutes(router, database, cfg.MLServiceURL, runner)
