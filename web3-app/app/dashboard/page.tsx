@@ -330,6 +330,7 @@ export default function TradingDashboardPage(): React.JSX.Element {
   const [newsError, setNewsError] = useState<string | null>(null)
   const [newsUpdatedAt, setNewsUpdatedAt] = useState<string | null>(null)
   const [newsSentimentEnabled, setNewsSentimentEnabled] = useState<boolean>(true)
+  const [newsSentimentWarning, setNewsSentimentWarning] = useState<string | null>(null)
 
   const [indicators, setIndicators] = useState<IndicatorsData | null>(null)
   const [indicatorsLoading, setIndicatorsLoading] = useState(false)
@@ -492,6 +493,9 @@ export default function TradingDashboardPage(): React.JSX.Element {
       ? 'bg-red-500/10 text-red-300 border-red-500/40'
       : 'bg-gray-800/70 text-gray-300 border-gray-700'
 
+  const sentimentUnavailableClasses =
+    'bg-amber-500/10 text-amber-200 border-amber-500/40'
+
   const addRecentSymbol = (symbol: string) => {
     const upper = symbol.toUpperCase()
     setRecentSymbols((prev) => {
@@ -596,12 +600,16 @@ export default function TradingDashboardPage(): React.JSX.Element {
 
         setNews(items)
         setNewsSentimentEnabled(data.sentimentEnabled !== false)
+        setNewsSentimentWarning(
+          typeof data.warning === 'string' && data.warning.trim() ? data.warning : null,
+        )
         setNewsUpdatedAt(new Date().toISOString())
       } catch (e) {
         console.error('loadNews error', e)
         if (!cancelled) {
           setNewsError('Failed to load news.')
           setNews([])
+          setNewsSentimentWarning(null)
         }
       } finally {
         if (!cancelled) setNewsLoading(false)
@@ -1246,6 +1254,19 @@ export default function TradingDashboardPage(): React.JSX.Element {
                 <span className="font-mono tabular-nums text-[11px]">
                   {Number.isFinite(sentimentAvg) ? sentimentAvg.toFixed(2) : ''}
                 </span>
+              </span>
+            )}
+
+            {!newsSentimentEnabled && (
+              <span
+                className={
+                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ' +
+                  sentimentUnavailableClasses
+                }
+                title={newsSentimentWarning || undefined}
+              >
+                <span>Overall:</span>
+                <span>unavailable</span>
               </span>
             )}
           </div>
