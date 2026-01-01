@@ -4,13 +4,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-var binanceBaseURL = "https://api.binance.com"
+var binanceBaseURL = func() string {
+	if v := strings.TrimSpace(os.Getenv("BINANCE_BASE_URL")); v != "" {
+		return v
+	}
+	return "https://data-api.binance.vision"
+}()
 
 type binancePriceResponse struct {
 	Symbol string `json:"symbol"`
