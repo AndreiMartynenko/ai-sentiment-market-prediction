@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { supabase } from '../../lib/supabaseClient'
 
 const mockSignals = [
   {
@@ -527,14 +528,37 @@ export default function TradingDashboardPage(): React.JSX.Element {
   useEffect(() => {
     if (typeof window === 'undefined') return
 
-    const isAuth = window.localStorage.getItem('pos_is_authenticated') === 'true'
+    let cancelled = false
 
-    if (!isAuth) {
-      router.replace('/auth/login')
-      return
+    async function checkAuth() {
+      try {
+        if (!supabase) {
+          router.replace('/auth/login')
+          return
+        }
+
+        const { data } = await supabase.auth.getUser()
+        if (cancelled) return
+
+        if (!data?.user) {
+          router.replace('/auth/login')
+          return
+        }
+
+        setIsCheckingAuth(false)
+      } catch (e) {
+        console.error('dashboard auth check error', e)
+        if (!cancelled) {
+          router.replace('/auth/login')
+        }
+      }
     }
 
-    setIsCheckingAuth(false)
+    checkAuth()
+
+    return () => {
+      cancelled = true
+    }
   }, [router])
 
   // 1b) Load latest stored notification (if any) so user sees it even if it was generated earlier
