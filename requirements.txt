@@ -22,7 +22,6 @@ httpx==0.25.2
 
 # Data collection
 yfinance==0.2.28
-ccxt==4.1.0
 
 # Crypto-specific APIs
 binance-connector==3.0.0
