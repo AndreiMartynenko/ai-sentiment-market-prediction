@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { supabase } from "../../../lib/supabaseClient"
@@ -11,6 +11,31 @@ export default function LoginPage(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function redirectIfAuthenticated() {
+      try {
+        if (!supabase) {
+          return
+        }
+
+        const { data } = await supabase.auth.getUser()
+        if (!cancelled && data?.user) {
+          router.replace("/dashboard")
+        }
+      } catch (e) {
+        console.error("login auth check error", e)
+      }
+    }
+
+    redirectIfAuthenticated()
+
+    return () => {
+      cancelled = true
+    }
+  }, [router])
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()

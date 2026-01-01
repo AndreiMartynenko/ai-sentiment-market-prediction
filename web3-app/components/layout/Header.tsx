@@ -177,20 +177,37 @@ export function Header() {
               </Link>
             ))}
             <div className="mt-2 flex gap-2">
-              <Link
-                href="/auth/login"
-                className="flex-1 rounded-lg border border-gray-800 px-3 py-2 text-center text-xs font-semibold tracking-wide text-gray-300 hover:border-gray-700 hover:bg-gray-900"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Log in
-              </Link>
-              <Link
-                href="/auth/signup"
-                className="flex-1 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-400 px-3 py-2 text-center text-xs font-semibold tracking-wide text-gray-950"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Sign up
-              </Link>
+              {currentUser && !userLoading ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setIsMenuOpen(false)
+                      await handleSignOut()
+                    }}
+                    className="flex-1 rounded-lg border border-gray-800 px-3 py-2 text-center text-xs font-semibold tracking-wide text-gray-300 hover:border-red-500/60 hover:text-red-300 hover:bg-gray-900"
+                  >
+                    Sign out
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/auth/login"
+                    className="flex-1 rounded-lg border border-gray-800 px-3 py-2 text-center text-xs font-semibold tracking-wide text-gray-300 hover:border-gray-700 hover:bg-gray-900"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Log in
+                  </Link>
+                  <Link
+                    href="/auth/signup"
+                    className="flex-1 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-400 px-3 py-2 text-center text-xs font-semibold tracking-wide text-gray-950"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Sign up
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
