@@ -12,6 +12,50 @@ if (!TWELVEDATA_API_KEY) {
   console.warn('TWELVEDATA_API_KEY is not set. /api/global/overview will return an error.')
 }
 
+async function fetchStooqQuote(
+  ticker: string,
+  displaySymbol: string,
+  displayName: string,
+): Promise<GlobalAsset | null> {
+  try {
+    const url = `https://stooq.com/q/l/?s=${encodeURIComponent(ticker)}&f=sd2t2ohlcv&h&e=csv`
+    const res = await fetch(url, { cache: 'no-store' })
+    if (!res.ok) {
+      console.error('Stooq HTTP error', ticker, res.status)
+      return null
+    }
+
+    const text = await res.text()
+    const lines = text.trim().split(/\r?\n/)
+    if (lines.length < 2) return null
+
+    const headers = lines[0].split(',').map((h) => h.trim().toLowerCase())
+    const values = lines[1].split(',').map((v) => v.trim())
+    const idx = (name: string) => headers.indexOf(name)
+
+    const open = Number(values[idx('open')])
+    const close = Number(values[idx('close')])
+
+    const price = Number.isFinite(close) ? close : Number(values[idx('last')])
+    if (!Number.isFinite(price)) return null
+
+    let changePercent = 0
+    if (Number.isFinite(open) && open > 0) {
+      changePercent = ((price - open) / open) * 100
+    }
+
+    return {
+      symbol: displaySymbol,
+      name: displayName,
+      price,
+      changePercent,
+    }
+  } catch (e) {
+    console.error('Stooq fetch failed', ticker, e)
+    return null
+  }
+}
+
 type GlobalAsset = {
   symbol: string
   name: string
@@ -109,19 +153,30 @@ async function fetchNinjasIndex(
 }
 
 export async function GET() {
-  if (!TWELVEDATA_API_KEY) {
-    return NextResponse.json(
-      { error: 'TWELVEDATA_API_KEY is not configured on the server.' },
-      { status: 500 },
-    )
-  }
-
   try {
-    // Gold via Twelve Data
-    const twelveQuotes = await Promise.all([
-      fetchQuote('XAU/USD', 'XAUUSD', 'Gold (XAUUSD)'),
+    const assets: GlobalAsset[] = []
+
+    // Prefer Twelve Data for gold when configured
+    if (TWELVEDATA_API_KEY) {
+      const twelveQuotes = await Promise.all([
+        fetchQuote('XAU/USD', 'XAUUSD', 'Gold (XAUUSD)'),
+      ])
+      for (const q of twelveQuotes) {
+        if (q) assets.push(q)
+      }
+    }
+
+    // Fallback: Stooq (free) for gold + indices
+    // Note: Stooq tickers may vary by exchange; these cover common US indices.
+    const stooqQuotes = await Promise.all([
+      fetchStooqQuote('xauusd', 'XAUUSD', 'Gold (XAUUSD)'),
+      fetchStooqQuote('^spx', 'US500', 'S&P 500'),
+      fetchStooqQuote('^ndx', 'NAS100', 'Nasdaq 100'),
+      fetchStooqQuote('^dji', 'US30', 'Dow Jones 30'),
     ])
-    const assets: GlobalAsset[] = twelveQuotes.filter((q): q is GlobalAsset => q !== null)
+    for (const q of stooqQuotes) {
+      if (q && !assets.some((a) => a.symbol === q.symbol)) assets.push(q)
+    }
 
     // Indices via API Ninjas if available
     if (API_NINJAS_API_KEY) {

@@ -34,10 +34,11 @@ function symbolToKeyword(symbol: string): string {
 
 export async function GET(req: Request) {
   if (!NEWS_API_KEY) {
-    return NextResponse.json(
-      { error: 'NEWS_API_KEY is not configured on the server.' },
-      { status: 500 },
-    )
+    return NextResponse.json({
+      items: [],
+      sentimentEnabled: false,
+      warning: 'NEWS_API_KEY is not configured on the server.',
+    })
   }
 
   const { searchParams } = new URL(req.url)
