@@ -32,6 +32,75 @@ function symbolToKeyword(symbol: string): string {
   return map[base] || base
 }
 
+async function fetchWithTimeout(
+  input: RequestInfo,
+  init: RequestInit & { timeoutMs?: number } = {},
+): Promise<Response> {
+  const { timeoutMs = 8000, ...rest } = init
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    return await fetch(input, { ...rest, signal: controller.signal })
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function getSentimentForText(symbol: string, text: string) {
+  // Render can cold-start; do a couple quick retries.
+  let lastError: unknown = null
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetchWithTimeout(`${ML_SERVICE_URL}/sentiment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol, text }),
+        timeoutMs: 12000,
+      })
+
+      if (!res.ok) {
+        throw new Error(`ML service status ${res.status}`)
+      }
+
+      const sentiment = (await res.json()) as any
+      return {
+        sentimentLabel: sentiment.label as string,
+        sentimentScore: sentiment.sentiment_score as number,
+        sentimentConfidence: sentiment.confidence as number,
+      }
+    } catch (e) {
+      lastError = e
+      // tiny backoff: 250ms, 500ms
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 250 * (attempt + 1)))
+    }
+  }
+  throw lastError
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let nextIndex = 0
+
+  async function worker() {
+    while (true) {
+      const idx = nextIndex
+      nextIndex += 1
+      if (idx >= items.length) return
+      results[idx] = await mapper(items[idx], idx)
+    }
+  }
+
+  const workers = Array.from({ length: Math.max(1, concurrency) }, () => worker())
+  await Promise.all(workers)
+  return results
+}
+
 export async function GET(req: Request) {
   if (!NEWS_API_KEY) {
     return NextResponse.json({
@@ -90,33 +159,15 @@ export async function GET(req: Request) {
   }
 
   // Call FinBERT ML service for each title (optionally title + description)
-  const enrichedItems = await Promise.all(
-    baseItems.map(async (item: { title: any; description: any }) => {
+  const enrichedItems = await mapWithConcurrency(
+    baseItems,
+    2,
+    async (item: any) => {
       try {
-        const res = await fetch(`${ML_SERVICE_URL}/sentiment`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            symbol: symbol,
-            text: item.title || item.description,
-          }),
-        })
-
-        if (!res.ok) {
-          throw new Error(`ML service status ${res.status}`)
-        }
-
-        const sentiment = await res.json()
-
-        return {
-          ...item,
-          sentimentLabel: sentiment.label as string,
-          sentimentScore: sentiment.sentiment_score as number,
-          sentimentConfidence: sentiment.confidence as number,
-        }
+        const s = await getSentimentForText(symbol, item.title || item.description)
+        return { ...item, ...s }
       } catch (e) {
         console.error('ML sentiment error for news item', item.title, e)
-        // Fallback: neutral sentiment
         return {
           ...item,
           sentimentLabel: 'neutral',
@@ -124,7 +175,7 @@ export async function GET(req: Request) {
           sentimentConfidence: 0,
         }
       }
-    }),
+    },
   )
 
   return NextResponse.json({ items: enrichedItems, sentimentEnabled: true })
