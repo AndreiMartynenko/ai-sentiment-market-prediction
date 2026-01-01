@@ -19,8 +19,14 @@ import re
 from typing import Dict, List, Optional
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
-import psycopg2
-from psycopg2.extras import execute_values
+try:
+    import psycopg2
+    from psycopg2.extras import execute_values
+    HAS_PSYCOPG2 = True
+except ImportError:
+    psycopg2 = None
+    execute_values = None
+    HAS_PSYCOPG2 = False
 from datetime import datetime
 
 # Configure logging
@@ -312,6 +318,8 @@ class DatabaseManager:
             dbname: Database name
             port: Database port
         """
+        if not HAS_PSYCOPG2:
+            raise RuntimeError("psycopg2 is not installed; database persistence is disabled")
         self.connection_string = {
             "host": host,
             "user": user,
@@ -378,6 +386,9 @@ class DatabaseManager:
         Returns:
             Number of records inserted
         """
+        if not HAS_PSYCOPG2 or execute_values is None:
+            logger.warning("psycopg2 not available; skipping batch persistence")
+            return 0
         try:
             cur = self.conn.cursor()
             

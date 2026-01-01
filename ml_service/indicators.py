@@ -27,8 +27,14 @@ except ImportError:
     HAS_PANDAS_TA = False
     logging.warning("pandas_ta not available. Technical indicators will use manual calculations.")
 import yfinance as yf
-import psycopg2
-from psycopg2.extras import execute_values
+try:
+    import psycopg2
+    from psycopg2.extras import execute_values
+    HAS_PSYCOPG2 = True
+except ImportError:
+    psycopg2 = None
+    execute_values = None
+    HAS_PSYCOPG2 = False
 from datetime import datetime, timedelta
 from functools import lru_cache
 from .crypto_data import get_crypto_data_manager
@@ -359,6 +365,8 @@ class TechnicalDBManager:
             dbname: Database name
             port: Database port
         """
+        if not HAS_PSYCOPG2:
+            raise RuntimeError("psycopg2 is not installed; database persistence is disabled")
         self.connection_string = {
             "host": host,
             "user": user,
