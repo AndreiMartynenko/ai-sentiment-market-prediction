@@ -48,6 +48,20 @@ async function fetchWithTimeout(
   }
 }
 
+async function mlServiceHealthy(): Promise<boolean> {
+  try {
+    const res = await fetchWithTimeout(`${ML_SERVICE_URL}/health`, {
+      method: 'GET',
+      timeoutMs: 2500,
+    })
+    if (!res.ok) return false
+    const data = (await res.json()) as any
+    return data?.status === 'ok'
+  } catch {
+    return false
+  }
+}
+
 async function getSentimentForText(symbol: string, text: string) {
   // Render can cold-start; do a couple quick retries.
   let lastError: unknown = null
@@ -158,9 +172,20 @@ export async function GET(req: Request) {
     })
   }
 
+  // If the ML service is cold-starting or unreachable, don't return misleading 0.00 values.
+  const healthy = await mlServiceHealthy()
+  if (!healthy) {
+    return NextResponse.json({
+      items: baseItems,
+      sentimentEnabled: false,
+      warning: 'ML sentiment service is unavailable or warming up. Showing news without sentiment.',
+    })
+  }
+
   // Call FinBERT ML service for each title (optionally title + description)
+  const itemsToAnalyze = baseItems.slice(0, 6)
   const enrichedItems = await mapWithConcurrency(
-    baseItems,
+    itemsToAnalyze,
     2,
     async (item: any) => {
       try {
@@ -178,5 +203,8 @@ export async function GET(req: Request) {
     },
   )
 
-  return NextResponse.json({ items: enrichedItems, sentimentEnabled: true })
+  return NextResponse.json({
+    items: [...enrichedItems, ...baseItems.slice(itemsToAnalyze.length)],
+    sentimentEnabled: true,
+  })
 }
