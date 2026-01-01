@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 
 // Simple Binance 24h ticker client for a few core symbols
-const BINANCE_BASE = 'https://api.binance.com'
+const BINANCE_BASE = 'https://data-api.binance.vision'
 const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT'] as const
 
 export const dynamic = 'force-dynamic'

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-const BINANCE_BASE = 'https://api.binance.com'
+const BINANCE_BASE = 'https://data-api.binance.vision'
 
 export const dynamic = 'force-dynamic'
 
