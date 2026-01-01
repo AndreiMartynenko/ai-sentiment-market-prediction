@@ -6,6 +6,7 @@ Simplified version that works without PostgreSQL
 import logging
 from typing import List, Optional
 from datetime import datetime
+import asyncio
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,14 +27,65 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global managers
+# Global managers/components (initialized lazily at startup)
+analyzer = None
+indicators = None
+engine = None
 news_manager = None
+_init_error: Optional[str] = None
+_init_task: Optional[asyncio.Task] = None
+
 # Initialize FastAPI app
 app = FastAPI(
     title="AI Sentiment Market Prediction - ML Service (No DB)",
     description="Machine Learning service for sentiment analysis and technical indicators (No database required)",
     version="1.0.0"
 )
+
+
+def _init_components_sync() -> None:
+    global analyzer, indicators, engine, news_manager, _init_error
+    try:
+        analyzer = get_analyzer()
+        indicators = get_indicators()
+        engine = get_engine(sentiment_weight=0.5, technical_weight=0.3)
+        news_manager = get_crypto_news_manager(analyzer)
+        _init_error = None
+        logger.info("All ML components initialized successfully (No database mode)")
+    except Exception as e:
+        _init_error = str(e)
+        analyzer = None
+        indicators = None
+        engine = None
+        news_manager = None
+        logger.error(f"Error initializing ML components: {e}")
+
+
+async def _init_components_async() -> None:
+    await asyncio.to_thread(_init_components_sync)
+
+
+def _service_ready() -> bool:
+    return analyzer is not None and indicators is not None and engine is not None
+
+
+def _require_ready(feature: str) -> None:
+    if _service_ready():
+        return
+    if _init_error:
+        raise HTTPException(
+            status_code=503,
+            detail=f"{feature} unavailable: initialization failed: {_init_error}",
+        )
+    raise HTTPException(status_code=503, detail=f"{feature} unavailable: service warming up")
+
+
+@app.on_event("startup")
+async def startup_event():
+    global _init_task
+    # Start background initialization so uvicorn can bind the port immediately.
+    if _init_task is None:
+        _init_task = asyncio.create_task(_init_components_async())
 
 # CORS middleware
 app.add_middleware(
@@ -43,20 +95,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Initialize analyzers (no database managers)
-try:
-    analyzer = get_analyzer()
-    indicators = get_indicators()
-    engine = get_engine(sentiment_weight=0.5, technical_weight=0.3)
-    news_manager = get_crypto_news_manager(analyzer)
-    logger.info("All ML components initialized successfully (No database mode)")
-except Exception as e:
-    logger.error(f"Error initializing ML components: {e}")
-    analyzer = None
-    indicators = None
-    engine = None
-    news_manager = None
 
 # Pydantic models
 class SentimentRequest(BaseModel):
@@ -173,14 +211,13 @@ async def health_check():
         status="ok",
         service="ML Service (No DB)",
         timestamp=datetime.now().isoformat(),
-        models_loaded=analyzer is not None and indicators is not None and engine is not None
+        models_loaded=_service_ready()
     )
 
 # Sentiment analysis endpoint (no database saving)
 @app.post("/sentiment", response_model=SentimentResponse)
 async def analyze_sentiment(request: SentimentRequest):
-    if analyzer is None:
-        raise HTTPException(status_code=503, detail="ML service not initialized")
+    _require_ready("sentiment")
     
     try:
         result = analyzer.analyze(request.text)
@@ -283,8 +320,7 @@ async def institutional_signal_proof(request: InstitutionalProofRequest):
 # Technical indicators endpoint (no database saving)
 @app.post("/technical", response_model=TechnicalResponse)
 async def calculate_technical(request: TechnicalRequest):
-    if indicators is None:
-        raise HTTPException(status_code=503, detail="ML service not initialized")
+    _require_ready("technical")
     
     try:
         result = indicators.analyze(request.symbol, period=request.period)
@@ -308,8 +344,7 @@ async def calculate_technical(request: TechnicalRequest):
 @app.get("/news/crypto", response_model=NewsResponse)
 async def get_crypto_news(symbols: Optional[str] = None, limit: int = 10):
     """Fetch crypto news with sentiment analysis for specified symbols."""
-    if news_manager is None:
-        raise HTTPException(status_code=503, detail="News service not initialized")
+    _require_ready("news")
 
     try:
         if symbols:
@@ -359,8 +394,7 @@ async def get_crypto_news(symbols: Optional[str] = None, limit: int = 10):
 # Hybrid signal generation endpoint (stores in memory, publishes to Solana)
 @app.post("/hybrid", response_model=HybridResponse)
 async def generate_hybrid_signal(request: HybridRequest):
-    if engine is None:
-        raise HTTPException(status_code=503, detail="ML service not initialized")
+    _require_ready("hybrid")
     
     try:
         logger.info(f"Generating hybrid signal for {request.symbol}")
@@ -476,7 +510,7 @@ async def get_signals_list(limit: int = 50, offset: int = 0):
 
 if __name__ == "__main__":
     uvicorn.run(
-        "main_no_db:app",
+        "ml_service.main:app",
         host="0.0.0.0",
         port=8000,
         reload=True,
