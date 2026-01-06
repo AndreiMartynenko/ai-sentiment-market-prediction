@@ -1054,6 +1054,51 @@ def generate_institutional_signal_debug(
     if entry is None:
         debug["gates"]["entry"] = False
 
+
+        # DEMO guarantee: when user disables all rules (RSI-only), always return a trade plan.
+        # This is intentionally high-risk and clearly labeled.
+        if rsi_only_mode:
+            close_exec = df_exec["close"].astype(float)
+            highs_exec = df_exec["high"].astype(float)
+            lows_exec = df_exec["low"].astype(float)
+
+            last_close = float(close_exec.iloc[-1])
+            lookback = min(len(df_exec), 20)
+            recent_low = float(lows_exec.iloc[-lookback:].min())
+            recent_high = float(highs_exec.iloc[-lookback:].max())
+
+            entry_price = last_close
+            if regime.bias == "LONG":
+                stop_loss = recent_low * 0.999
+                risk = max(1e-9, entry_price - stop_loss)
+                take_profit = entry_price + 2.0 * risk
+            else:
+                stop_loss = recent_high * 1.001
+                risk = max(1e-9, stop_loss - entry_price)
+                take_profit = entry_price - 2.0 * risk
+
+            return {
+                "engine_version": ENGINE_VERSION,
+                "applied_rules": applied_rules,
+                "signal": regime.bias,
+                "confidence_score": 5,
+                "risk_level": "HIGH",
+                "risk_warnings": [
+                    "HIGH RISK DEMO: RSI-only mode forces a trade even when normal entry rules fail.",
+                ],
+                "market_regime": regime.market_regime,
+                "sentiment_score": float(round(sent.sentiment_score, 4)),
+                "structure": struct.structure,
+                "warnings": warnings + ["DEMO_FORCE_TRADE"],
+                "entry_reason": ["rsi_only_demo"],
+                "entry_price": float(entry_price),
+                "stop_loss": float(stop_loss),
+                "take_profit": float(take_profit),
+                "risk_reward": "1:2+",
+                "timeframe": timeframe,
+                "invalidate_if": ["do_not_use_in_real_trading"],
+            }, debug
+
         failed = []
         checks = (entry_debug.get("checks") or {}) if isinstance(entry_debug, dict) else {}
         enable_volume = bool(checks.get("enable_volume", True))
