@@ -4,6 +4,8 @@
 
 The AI-Driven Sentiment Market Prediction System is a microservices-based application that analyzes financial market sentiment and technical indicators to generate intelligent trading signals.
 
+Check the test file `test_api_endpoints.py` for API endpoint details.
+
 ## Architecture Components
 
 ### 1. Go API Backend (`internal/api/`)
