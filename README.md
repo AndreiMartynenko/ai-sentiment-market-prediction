@@ -406,6 +406,3 @@ For questions or issues:
 - Check the documentation in `/docs`
 - Review API docs at http://localhost:8000/docs (ML Service)
 
----
-
-**Built with ❤️ for intelligent financial market analysis**

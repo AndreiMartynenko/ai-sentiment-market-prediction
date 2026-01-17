@@ -4,6 +4,8 @@ Simplified version that works without PostgreSQL
 """
 
 import logging
+import os
+import random
 from typing import List, Optional
 from datetime import datetime
 import asyncio
@@ -14,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from ml_service.sentiment import get_analyzer
 from ml_service.indicators import get_indicators
-from ml_service.hybrid_engine import get_engine
+from ml_service.hybrid_engine import get_db_manager, get_engine
 from ml_service.solana_layer import send_proof
 from ml_service.news import get_crypto_news_manager
 from ml_service.crypto_data import get_crypto_data_manager
@@ -32,8 +34,12 @@ analyzer = None
 indicators = None
 engine = None
 news_manager = None
+db_manager = None
 _init_error: Optional[str] = None
 _init_task: Optional[asyncio.Task] = None
+
+# Solana publish policy (to avoid spamming devnet)
+_solana_published_count = 0
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -44,12 +50,14 @@ app = FastAPI(
 
 
 def _init_components_sync() -> None:
-    global analyzer, indicators, engine, news_manager, _init_error
+    global analyzer, indicators, engine, news_manager, db_manager, _init_error
     try:
         analyzer = get_analyzer()
         indicators = get_indicators()
         engine = get_engine(sentiment_weight=0.5, technical_weight=0.3)
         news_manager = get_crypto_news_manager(analyzer)
+        # Optional database manager (enabled only if psycopg2 is installed and connection works)
+        db_manager = get_db_manager()
         _init_error = None
         logger.info("All ML components initialized successfully (No database mode)")
     except Exception as e:
@@ -58,6 +66,7 @@ def _init_components_sync() -> None:
         indicators = None
         engine = None
         news_manager = None
+        db_manager = None
         logger.error(f"Error initializing ML components: {e}")
 
 
@@ -67,6 +76,48 @@ async def _init_components_async() -> None:
 
 def _service_ready() -> bool:
     return analyzer is not None and indicators is not None and engine is not None
+
+
+def _parse_float_env(name: str, default_value: float) -> float:
+    raw = os.getenv(name, "")
+    if raw == "":
+        return default_value
+    try:
+        return float(raw)
+    except ValueError:
+        return default_value
+
+
+def _parse_int_env(name: str, default_value: int) -> int:
+    raw = os.getenv(name, "")
+    if raw == "":
+        return default_value
+    try:
+        return int(raw)
+    except ValueError:
+        return default_value
+
+
+def _should_publish_to_solana() -> bool:
+    """Return True if we should attempt Solana anchoring for this signal."""
+    global _solana_published_count
+
+    enabled = os.getenv("SOLANA_PUBLISH_ENABLED", "false").lower() == "true"
+    if not enabled:
+        return False
+
+    max_count = _parse_int_env("SOLANA_PUBLISH_MAX_COUNT", 5)
+    if max_count >= 0 and _solana_published_count >= max_count:
+        return False
+
+    sample_rate = _parse_float_env("SOLANA_PUBLISH_SAMPLE_RATE", 0.1)
+    # Clamp to [0,1]
+    if sample_rate <= 0.0:
+        return False
+    if sample_rate >= 1.0:
+        return True
+
+    return random.random() < sample_rate
 
 
 def _require_ready(feature: str) -> None:
@@ -431,26 +482,47 @@ async def generate_hybrid_signal(request: HybridRequest):
         # Build reason with actual values
         reason = f"Technical Score: {technical_score:.3f}, Sentiment: {sentiment_score:.3f}, Volatility: {volatility_index:.3f}. {reason}"
         
-        # Try to publish to Solana
+        # Try to publish to Solana (controlled by env policy)
         proof_hash = None
         tx_signature = None
-        try:
-            solana_result = send_proof({
-                "symbol": request.symbol,
-                "signal": signal,
-                "hybrid_score": hybrid_score,
-                "confidence": confidence,
-                "timestamp": datetime.now().isoformat()
-            })
-            proof_hash = solana_result.get("proof_hash")
-            tx_signature = solana_result.get("tx_signature")
-            logger.info(f"Published signal to Solana: {tx_signature}")
-        except Exception as solana_error:
-            logger.warning(f"Could not publish to Solana: {solana_error}")
+        if _should_publish_to_solana():
+            try:
+                solana_result = send_proof({
+                    "symbol": request.symbol,
+                    "signal": signal,
+                    "hybrid_score": hybrid_score,
+                    "confidence": confidence,
+                    "timestamp": datetime.now().isoformat()
+                })
+                proof_hash = solana_result.get("proof_hash")
+                tx_signature = solana_result.get("tx_signature")
+                global _solana_published_count
+                _solana_published_count += 1
+                logger.info(f"Published signal to Solana: {tx_signature}")
+            except Exception as solana_error:
+                logger.warning(f"Could not publish to Solana: {solana_error}")
         
-        # Store in memory cache
+        # Persist to database if available; otherwise store in memory cache
+        record_id = None
+        if db_manager is not None:
+            try:
+                record_id = db_manager.save_hybrid_signal(
+                    symbol=request.symbol,
+                    sentiment_score=sentiment_score,
+                    technical_score=technical_score,
+                    hybrid_score=hybrid_score,
+                    signal=signal,
+                    reason=reason,
+                    confidence=confidence,
+                    proof_hash=proof_hash,
+                    tx_signature=tx_signature,
+                )
+            except Exception as db_error:
+                logger.warning(f"Could not persist hybrid signal to database: {db_error}")
+
+        # Store in memory cache (still useful for no-db mode, and as a fallback)
         signal_data = {
-            "id": len(signals_cache) + 1,
+            "id": record_id if record_id is not None else (len(signals_cache) + 1),
             "symbol": request.symbol,
             "signal": signal,
             "hybrid_score": hybrid_score,
@@ -490,19 +562,66 @@ async def generate_hybrid_signal(request: HybridRequest):
 @app.get("/signals/list")
 async def get_signals_list(limit: int = 50, offset: int = 0):
     """
-    Get list of signals from in-memory cache (no database)
+    Get list of signals.
+    If database persistence is available, returns newest signals from PostgreSQL.
+    Otherwise, returns signals from the in-memory cache.
     """
     try:
-        # Reverse to show newest first
+        if db_manager is not None and getattr(db_manager, "conn", None) is not None:
+            cur = db_manager.conn.cursor()
+            cur.execute(
+                """
+                SELECT id, symbol, signal, hybrid_score, confidence, sentiment_score, technical_score,
+                       volatility_index, reason, proof_hash, tx_signature, timestamp, created_at
+                FROM hybrid_signals
+                ORDER BY timestamp DESC
+                LIMIT %s OFFSET %s
+                """,
+                (limit, offset),
+            )
+            rows = cur.fetchall()
+            cur.close()
+
+            signals = []
+            for r in rows:
+                signals.append(
+                    {
+                        "id": r[0],
+                        "symbol": r[1],
+                        "signal": r[2],
+                        "hybrid_score": float(r[3]) if r[3] is not None else None,
+                        "confidence": float(r[4]) if r[4] is not None else None,
+                        "sentiment_score": float(r[5]) if r[5] is not None else None,
+                        "technical_score": float(r[6]) if r[6] is not None else None,
+                        "volatility_index": float(r[7]) if r[7] is not None else None,
+                        "reason": r[8],
+                        "proof_hash": r[9],
+                        "tx_signature": r[10],
+                        "timestamp": r[11].isoformat() if r[11] is not None else None,
+                        "created_at": r[12].isoformat() if r[12] is not None else None,
+                    }
+                )
+
+            return {
+                "success": True,
+                "signals": signals,
+                "count": len(signals),
+                "limit": limit,
+                "offset": offset,
+                "source": "postgres",
+            }
+
+        # Reverse to show newest first (cache)
         signals = list(reversed(signals_cache))[offset:offset+limit]
-        
+
         return {
             "success": True,
             "signals": signals,
             "count": len(signals),
             "total": len(signals_cache),
             "limit": limit,
-            "offset": offset
+            "offset": offset,
+            "source": "memory",
         }
     except Exception as e:
         logger.error(f"Error fetching signals list: {e}")
@@ -514,6 +633,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8000,
         reload=True,
-        log_level="info"
+        log_level="info",
     )
-
