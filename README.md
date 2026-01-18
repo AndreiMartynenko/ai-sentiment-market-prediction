@@ -399,10 +399,4 @@ This project is licensed under the MIT License.
 - **pandas-ta**: [pandas-ta](https://github.com/twopirllc/pandas-ta)
 - **Streamlit**: [Streamlit](https://streamlit.io/)
 
-## 📞 Support
-
-For questions or issues:
-- Open an issue on GitHub
-- Check the documentation in `/docs`
-- Review API docs at http://localhost:8000/docs (ML Service)
 
