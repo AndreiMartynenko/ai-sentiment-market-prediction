@@ -368,17 +368,6 @@ black ml_service/ dashboard/ tests/
 flake8 ml_service/ dashboard/ tests/
 ```
 
-## 📋 TODO / Roadmap
-
-- [ ] Implement real-time data collection from NewsAPI
-- [ ] Add Binance/binance API integration for live market data
-- [ ] Implement backtesting framework
-- [ ] Add WebSocket support for real-time dashboard updates
-- [ ] Implement signal notification system (Telegram/Email)
-- [ ] Add portfolio management features
-- [ ] Implement strategy performance tracking
-- [ ] Add support for additional symbols
-- [ ] Create automated trading integration (paper trading)
 
 ## 🤝 Contributing
 
