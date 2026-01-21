@@ -93,7 +93,7 @@ ai_sentiment-market-prediction/
 
 ### Prerequisites
 
-- Docker & Docker Compose
+
 - Go 1.21+ (for local development)
 - Python 3.10+ (for local development)
 
