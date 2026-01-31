@@ -47,7 +47,7 @@ build/
 # PyTorch models
 *.pt
 *.pth
-models/
+/models/
 *.ckpt
 *.pkl
 

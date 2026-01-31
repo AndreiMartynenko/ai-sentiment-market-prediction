@@ -186,7 +186,7 @@ export async function GET() {
         fetchNinjasIndex('^DJI', 'US30', 'Dow Jones 30'),
       ])
       for (const q of ninjasQuotes) {
-        if (q) assets.push(q)
+        if (q && !assets.some((a) => a.symbol === q.symbol)) assets.push(q)
       }
     }
 

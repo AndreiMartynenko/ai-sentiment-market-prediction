@@ -95,7 +95,7 @@ func (s *SignalService) calculateSignal(symbol string, sentimentScore float64, p
 	// Calculate price targets and stop loss
 	var priceTarget, stopLoss *float64
 	if len(priceData) > 0 {
-		currentPrice := priceData[len(priceData)-1].Price
+		currentPrice := priceData[len(priceData)-1].Close
 
 		if action == "BUY" {
 			target := currentPrice * 1.05 // 5% upside target

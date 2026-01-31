@@ -75,3 +75,78 @@ type HealthResponse struct {
 	Database  string `json:"database"`
 	MLService string `json:"ml_service"`
 }
+
+type NewsRequest struct {
+	Query    string `json:"query"`
+	Sources  string `json:"sources"`
+	From     string `json:"from"`
+	To       string `json:"to"`
+	SortBy   string `json:"sortBy"`
+	PageSize int    `json:"pageSize"`
+	Page     int    `json:"page"`
+}
+
+type NewsArticle struct {
+	Title       string    `json:"title"`
+	Content     string    `json:"content"`
+	Source      string    `json:"source"`
+	URL         string    `json:"url"`
+	PublishedAt time.Time `json:"publishedAt"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+type NewsResponse struct {
+	Articles []NewsArticle `json:"articles"`
+	Total    int           `json:"total"`
+	Page     int           `json:"page"`
+	PageSize int           `json:"pageSize"`
+}
+
+type AnalyzeTextRequest struct {
+	Text  string `json:"text" binding:"required"`
+	Model string `json:"model,omitempty"`
+}
+
+type AnalyzeTextResponse struct {
+	Sentiment  string  `json:"sentiment"`
+	Confidence float64 `json:"confidence"`
+	Model      string  `json:"model"`
+	Text       string  `json:"text"`
+}
+
+type PerformanceMetrics struct {
+	Accuracy  float64 `json:"accuracy"`
+	Precision float64 `json:"precision"`
+	Recall    float64 `json:"recall"`
+	F1        float64 `json:"f1"`
+}
+
+type GenerateSignalsRequest struct {
+	Symbols   []string `json:"symbols" binding:"required"`
+	Timeframe string   `json:"timeframe,omitempty"`
+	Lookback  int      `json:"lookback,omitempty"`
+}
+
+type SignalResponse struct {
+	Symbol         string     `json:"symbol"`
+	Action         string     `json:"action"`
+	Strength       float64    `json:"strength"`
+	Confidence     float64    `json:"confidence"`
+	Reasoning      string     `json:"reasoning"`
+	SentimentScore float64    `json:"sentiment_score"`
+	PriceTarget    *float64   `json:"price_target,omitempty"`
+	StopLoss       *float64   `json:"stop_loss,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
+}
+
+type PerformanceResponse struct {
+	Symbol     string  `json:"symbol"`
+	From       string  `json:"from"`
+	To         string  `json:"to"`
+	Total      int     `json:"total"`
+	Winning    int     `json:"winning"`
+	Losing     int     `json:"losing"`
+	WinRatePct float64 `json:"win_rate_pct"`
+}

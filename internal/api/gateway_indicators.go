@@ -36,6 +36,16 @@ type indicatorsResponse struct {
 	Swing    []indicatorSummary `json:"swing"`
 }
 
+// ema computes an Exponential Moving Average (EMA) series.
+//
+// Formula:
+//
+//	EMA_t = α·price_t + (1-α)·EMA_{t-1}
+//	α = 2 / (period + 1)
+//
+// Initialization:
+//
+//	EMA_0 = price_0
 func ema(values []float64, period int) []float64 {
 	if len(values) == 0 {
 		return []float64{}
@@ -51,6 +61,21 @@ func ema(values []float64, period int) []float64 {
 	return out
 }
 
+// rsi computes the Relative Strength Index (RSI) series (Wilder's smoothing).
+//
+// Core definitions:
+//
+//	RS  = AvgGain / AvgLoss
+//	RSI = 100 - 100/(1 + RS)
+//
+// Smoothing update (Wilder):
+//
+//	AvgGain_t = (AvgGain_{t-1}·(period-1) + Gain_t) / period
+//	AvgLoss_t = (AvgLoss_{t-1}·(period-1) + Loss_t) / period
+//
+// Edge case:
+//
+//	If there are not enough samples (len(values) <= period), returns neutral RSI=50 for all points.
 func rsi(values []float64, period int) []float64 {
 	out := make([]float64, len(values))
 	if len(values) <= period {
