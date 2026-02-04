@@ -16,6 +16,7 @@ import (
 	"ai_sentiment-market-prediction/internal/services"
 )
 
+// Where should I add WS
 func main() {
 	// Load configuration
 	cfg, err := config.Load()
