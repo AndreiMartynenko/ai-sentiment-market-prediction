@@ -7,6 +7,7 @@ End-to-end demo app for generating crypto trading signals from:
 
 It also supports **proof-of-signal** via a deterministic SHA-256 hash (optional Solana devnet anchoring).
 
+
 ## Services / Ports
 
 - Go API gateway: `http://localhost:8080`
