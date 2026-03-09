@@ -1,8 +1,8 @@
-# AI Sentiment Market Prediction - API Documentation
+# Proof of Signal - API Documentation
 
 ## Overview
 
-The AI Sentiment Market Prediction system provides a comprehensive API for sentiment analysis, trading signal generation, and market data collection. This system is designed for academic research and dissertation purposes.
+The Proof of Signal system provides a comprehensive API for sentiment analysis, trading signal generation, and market data collection. This system is designed for academic research and dissertation purposes.
 
 ## Base URLs
 
@@ -25,7 +25,7 @@ Check the health status of the API.
 ```json
 {
   "status": "healthy",
-  "service": "ai-sentiment-market-prediction",
+  "service": "proof-of-signal",
   "version": "1.0.0"
 }
 ```
@@ -366,7 +366,7 @@ Get service information.
 **Response:**
 ```json
 {
-  "service": "AI Sentiment Market Prediction - ML Service",
+  "service": "Proof of Signal - ML Service",
   "version": "1.0.0",
   "status": "healthy",
   "available_models": ["finbert", "roberta", "distilbert"]

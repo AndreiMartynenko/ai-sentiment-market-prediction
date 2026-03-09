@@ -1,11 +1,20 @@
-# AI Sentiment Market Prediction (Proof-of-Signal)
+# Proof-of-Signal
 
-End-to-end demo app for generating crypto trading signals from:
+Event-driven backend demo that processes market-style inputs and produces deterministic trading signals with a verifiable **proof-of-signal** artifact.
 
-- News sentiment (FinBERT-style)
-- Technical indicators (EMA/RSI/MACD)
+The system separates orchestration (Go gateway) from enrichment (Python ML service) and can attach a deterministic SHA-256 hash to each generated signal so outputs can be reproduced and verified across runs (optional Solana devnet anchoring).
 
-It also supports **proof-of-signal** via a deterministic SHA-256 hash (optional Solana devnet anchoring).
+## Architecture
+
+- Go API gateway (Gin)
+  - Public HTTP API and orchestration layer
+  - Optional Postgres-backed endpoints (disabled via `NO_DB=true`)
+  - Optional in-memory background runner (`ENABLE_INSTITUTIONAL_RUNNER=true`)
+- Python ML service (FastAPI)
+  - Sentiment and hybrid enrichment endpoints
+  - Proof hash generation and optional Solana publish
+- Next.js dashboard
+  - UI for interacting with the system
 
 ## Services / Ports
 
@@ -58,7 +67,9 @@ If you want DB-backed endpoints, start your own Postgres locally and set `DATABA
 
 ```bash
 curl http://localhost:8080/health
+curl "http://localhost:8080/api/v1/price?symbol=BTCUSDT"
 curl "http://localhost:8080/api/v1/indicators?symbol=BTCUSDT"
+curl -X POST http://localhost:8080/api/v1/proof/mock
 ```
 
 ### ML service

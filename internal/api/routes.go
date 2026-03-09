@@ -1,8 +1,8 @@
 package api
 
 import (
-	"ai_sentiment-market-prediction/internal/db"
-	"ai_sentiment-market-prediction/internal/services"
+	"github.com/AndreiMartynenko/proof-of-signal/internal/db"
+	"github.com/AndreiMartynenko/proof-of-signal/internal/services"
 
 	"github.com/gin-gonic/gin"
 )

@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"ai_sentiment-market-prediction/internal/db"
-	"ai_sentiment-market-prediction/internal/models"
+	"github.com/AndreiMartynenko/proof-of-signal/internal/db"
+	"github.com/AndreiMartynenko/proof-of-signal/internal/models"
 
 	"github.com/gin-gonic/gin"
 )
@@ -16,7 +16,7 @@ func HealthCheck(database *db.Connection) gin.HandlerFunc {
 		if database == nil || database.DB == nil {
 			c.JSON(http.StatusOK, models.HealthResponse{
 				Status:    "healthy",
-				Service:   "AI Sentiment Market Prediction API",
+				Service:   "Proof of Signal API",
 				Version:   "1.0.0",
 				Database:  "disconnected",
 				MLService: "unknown",
@@ -27,7 +27,7 @@ func HealthCheck(database *db.Connection) gin.HandlerFunc {
 		if err := database.DB.Ping(); err != nil {
 			c.JSON(http.StatusServiceUnavailable, models.HealthResponse{
 				Status:    "unhealthy",
-				Service:   "AI Sentiment Market Prediction API",
+				Service:   "Proof of Signal API",
 				Version:   "1.0.0",
 				Database:  "disconnected",
 				MLService: "unknown",
@@ -37,7 +37,7 @@ func HealthCheck(database *db.Connection) gin.HandlerFunc {
 
 		c.JSON(http.StatusOK, models.HealthResponse{
 			Status:    "healthy",
-			Service:   "AI Sentiment Market Prediction API",
+			Service:   "Proof of Signal API",
 			Version:   "1.0.0",
 			Database:  "connected",
 			MLService: "unknown",

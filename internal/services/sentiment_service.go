@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	"ai_sentiment-market-prediction/internal/models"
+	"github.com/AndreiMartynenko/proof-of-signal/internal/models"
 )
 
 type SentimentService struct {

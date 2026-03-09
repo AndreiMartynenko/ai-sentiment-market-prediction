@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
-	"github.com/AndreiMartynenko/golang-api/handlers"
+	"github.com/AndreiMartynenko/proof-of-signal/archive/handlers"
 )
 
 func main() {

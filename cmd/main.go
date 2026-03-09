@@ -2,21 +2,30 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/rs/zerolog"
 
-	"ai_sentiment-market-prediction/internal/api"
-	"ai_sentiment-market-prediction/internal/config"
-	"ai_sentiment-market-prediction/internal/db"
-	"ai_sentiment-market-prediction/internal/services"
+	"github.com/AndreiMartynenko/proof-of-signal/internal/api"
+	"github.com/AndreiMartynenko/proof-of-signal/internal/config"
+	"github.com/AndreiMartynenko/proof-of-signal/internal/db"
+	"github.com/AndreiMartynenko/proof-of-signal/internal/middleware"
+	"github.com/AndreiMartynenko/proof-of-signal/internal/services"
 )
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -38,22 +47,20 @@ func main() {
 		defer database.Close()
 	}
 
+	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
+
 	// Initialize router
-	router := gin.Default()
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.Use(middleware.RequestID())
+	router.Use(middleware.AccessLog(logger))
+
+	// Metrics endpoint
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Start 24/7 institutional signal runner (in-memory)
 	var runner *services.InstitutionalSignalRunner
 	if os.Getenv("ENABLE_INSTITUTIONAL_RUNNER") == "true" {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		shutdownCh := make(chan os.Signal, 1)
-		signal.Notify(shutdownCh, syscall.SIGINT, syscall.SIGTERM)
-		go func() {
-			<-shutdownCh
-			cancel()
-		}()
-
 		runner = services.NewInstitutionalSignalRunner(cfg.MLServiceURL)
 		go runner.Run(ctx)
 	}
@@ -61,15 +68,28 @@ func main() {
 	// Setup API routes
 	api.SetupRoutes(router, database, cfg.MLServiceURL, runner)
 
-	// Get port from environment or use default
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+	server := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           router,
+		ReadTimeout:       5 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
-	// Start server
-	log.Printf("Starting server on port %s", port)
-	if err := router.Run(":" + port); err != nil {
-		log.Fatal("Failed to start server:", err)
+	log.Printf("Starting server on port %s", cfg.Port)
+	go func() {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("HTTP server error: %v", err)
+			stop()
+		}
+	}()
+
+	<-ctx.Done()
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Printf("HTTP server shutdown error: %v", err)
 	}
 }

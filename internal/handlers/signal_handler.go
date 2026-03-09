@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"ai_sentiment-market-prediction/internal/models"
-	"ai_sentiment-market-prediction/internal/services"
+	"github.com/AndreiMartynenko/proof-of-signal/internal/models"
+	"github.com/AndreiMartynenko/proof-of-signal/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
