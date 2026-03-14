@@ -16,6 +16,13 @@ The system separates orchestration (Go gateway) from enrichment (Python ML servi
 - Next.js dashboard
   - UI for interacting with the system
 
+## Operational features
+
+- Request IDs: every response includes `X-Request-Id`
+- Structured access logs (JSON) for each request
+- Prometheus metrics: `GET /metrics`
+- Graceful shutdown on `SIGINT`/`SIGTERM` with HTTP server timeouts
+
 ## Services / Ports
 
 - Go API gateway: `http://localhost:8080`
@@ -67,6 +74,7 @@ If you want DB-backed endpoints, start your own Postgres locally and set `DATABA
 
 ```bash
 curl http://localhost:8080/health
+curl http://localhost:8080/metrics
 curl "http://localhost:8080/api/v1/price?symbol=BTCUSDT"
 curl "http://localhost:8080/api/v1/indicators?symbol=BTCUSDT"
 curl -X POST http://localhost:8080/api/v1/proof/mock
